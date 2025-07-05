@@ -1,0 +1,21 @@
+services:
+  joytag-api:
+    build: .
+    container_name: joytag_api_server
+    ports:
+      - "8000:8000"
+    
+    # ★★★★★ ここから追加！ ★★★★★
+    volumes:
+      # 「PCの今のフォルダ(.)」を「コンテナの/appフォルダ」に同期させる
+      - .:/app
+    # ★★★★★ ここまで追加！ ★★★★★
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
