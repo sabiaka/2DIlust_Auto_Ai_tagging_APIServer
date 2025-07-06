@@ -4,6 +4,7 @@ python-multipart
 Pillow
 torch
 torchvision
+onnx
 onnxruntime-gpu
 transformers
 einops
