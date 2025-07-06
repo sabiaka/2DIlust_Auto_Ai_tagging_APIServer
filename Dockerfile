@@ -1,23 +1,31 @@
-# Dockerfile
+# ベースイメージを、onnxruntimeが要求するCUDA 12.1.1に完全一致させた最強版！
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
-# ベースイメージを指定
-FROM python:3.10-slim
+# 環境変数の設定
+ENV PYTHONUNBUFFERED 1
+ENV DEBIAN_FRONTEND=noninteractive
 
-# 作業ディレクトリを設定
+# 必要なツールとPythonをインストール
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3.10 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# python3 -> python になるようにシンボリックリンクを作成
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# 作業ディレクトリを作成して移動
 WORKDIR /app
 
-# 必要なライブラリを先にインストールしちゃう
+# 先にrequirements.txtだけコピーして、ライブラリをインストール
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu118
-RUN pip install --no-cache-dir onnxruntime-gpu --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
-
-# requirements.txtをコピーして、残りのライブラリもインストール
-COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ポートを開ける
-EXPOSE 8000
+# プロジェクトのファイルを全部コピー
+COPY . .
 
-# サーバーを起動！
-# --reload を付けると、コードを保存しただけでサーバーが自動で再起動するようになってマジ神！
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--reload"]
+# サーバーを起動するコマンド
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
