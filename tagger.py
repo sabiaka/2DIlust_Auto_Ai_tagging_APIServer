@@ -2,43 +2,68 @@ import torch
 from PIL import Image
 import torchvision.transforms.functional as TVF
 from pathlib import Path
-from Models import VisionModel
-from typing import List # ← Listをインポートするのを忘れずに！
-import csv # ← csvモジュールをインポート
+from typing import List
+import csv
+import timm
+from safetensors.torch import load_file # safetensorsから直接読み込むためのやつ
 
 # --- グローバル変数 ---
 MODEL_PATH = './models_data'
-THRESHOLD = 0.4          # タグ付けの閾値
+MODEL_FILE = Path(MODEL_PATH) / 'model.safetensors' # モデルファイルのパス
+CONFIG_FILE = Path(MODEL_PATH) / 'config.json'     # 設定ファイルのパス
+
+THRESHOLD = 0.35
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# --- 翻訳辞書の作成 ---
+# --- タグリストと翻訳辞書の作成 ---
+tags_list = []
 translation_map = {}
-# CSVファイルのパスを指定
-translation_file_path = Path(MODEL_PATH) / 'top_tags.csv'
+tag_file_path = Path(MODEL_PATH) / 'selected_tags.csv'
 
-# CSVファイルが存在したら、中身を読み込んで辞書を作る
-if translation_file_path.exists():
-    with open(translation_file_path, 'r', encoding='utf-8-sig') as f: # utf-8-sigでBOM付きも対応
+if tag_file_path.exists():
+    with open(tag_file_path, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
-        for row in reader:
-            # 空白行やデータが不完全な行をスキップ
-            if len(row) >= 2 and row[0] and row[1]:
-                # 英語をキー、日本語を値として辞書に保存
-                translation_map[row[0].strip()] = row[1].strip()
-    print("Translation map loaded successfully.")
-else:
-    print("Translation file not found. Skipping.")
+        header = next(reader)
+        try:
+            name_index = header.index('name')
+            japanese_name_index = header.index('japanese_name')
+        except ValueError:
+            japanese_name_index = -1
+            print("⚠️ 'japanese_name'列が見つからなかったから、翻訳機能はオフになるよ。")
 
-# --- モデルのロード（アプリケーション起動時に一度だけ実行） ---
-print(f"Loading JoyTag model on {DEVICE}...")
-model = VisionModel.load_model(MODEL_PATH)
+        for row in reader:
+            try:
+                english_tag = row[name_index].replace('_', ' ')
+                tags_list.append(english_tag)
+                if japanese_name_index != -1 and row[japanese_name_index]:
+                    translation_map[english_tag] = row[japanese_name_index]
+            except IndexError:
+                continue
+    print("✅ タグリストと翻訳辞書の読み込み完了！")
+else:
+    print(f"❌ {tag_file_path} が見つからない！処理を中断するね。")
+    exit()
+
+# ★★★ ここからがハイライト！モデルの読み込み方をtimm方式に変更！ ★★★
+print(f"Loading wd-eva02-large-tagger-v3 model with timm on {DEVICE}...")
+
+# timmを使って、設計図通りの空っぽのモデルを作る
+model = timm.create_model(
+    'eva02_large_patch14_448.mim_in22k_ft_in22k_in1k', # モデルの正式名称
+    pretrained=False, # まだ重みは読み込まない
+    num_classes=len(tags_list) # タグの数（出力層の数）を合わせる
+)
+
+# ダウンロードしたモデルファイル（safetensors）から重みを読み込む
+state_dict = load_file(MODEL_FILE, device='cpu')
+model.load_state_dict(state_dict)
+
 model.eval()
 model = model.to(DEVICE)
+# ★★★ ここまでが新しい読み込み方！ ★★★
 
-with open(Path(MODEL_PATH) / 'top_tags.txt', 'r', encoding='utf-8') as f:
-    top_tags = [line.strip() for line in f.readlines() if line.strip()]
+print("✅ モデルのロード完了！今度こそ完璧！")
 
-print("Model loaded successfully.")
 
 # --- 画像の前処理関数 ---
 def prepare_image(image: Image.Image, target_size: int) -> torch.Tensor:
@@ -57,33 +82,30 @@ def prepare_image(image: Image.Image, target_size: int) -> torch.Tensor:
         
     # テンソルに変換し、正規化
     image_tensor = TVF.pil_to_tensor(padded_image) / 255.0
-    image_tensor = TVF.normalize(image_tensor, mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
+    image_tensor = TVF.normalize(image_tensor, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     
     return image_tensor
 
 # --- タグ予測関数 ---
 @torch.no_grad()
 def predict(image: Image.Image) -> List[str]:
-    """
-    PIL Imageオブジェクトを受け取り、JoyTagでタグを予測し、日本語に翻訳されたタグのリストを返す。
-    """
-    image_tensor = prepare_image(image.convert("RGB"), model.image_size)
-    batch = {'image': image_tensor.unsqueeze(0).to(DEVICE)}
+    # 前処理のtarget_sizeをモデルに合わせて動的に取得
+    image_tensor = prepare_image(image.convert("RGB"), model.default_cfg['input_size'][-1])
+    batch = image_tensor.unsqueeze(0).to(DEVICE)
     
     with torch.amp.autocast_mode.autocast(DEVICE, enabled=True):
+        # ★★★ モデルの出力がちょっと違うから、ここも書き換え！ ★★★
         preds = model(batch)
         
-    tag_preds = preds['tags'].sigmoid().cpu()
-    scores = {top_tags[i]: tag_preds[0][i] for i in range(len(top_tags))}
+    tag_preds = preds.sigmoid().cpu()[0] # 出力形式がシンプルになってる
     
-    # AIが予測した英語タグのリスト
+    # スコアとタグ名を紐づけ
+    scores = {tags_list[i]: tag_preds[i] for i in range(len(tags_list))}
+    
+    # スコアが閾値を超えた英語タグだけをリストアップ
     predicted_tags = [tag for tag, score in scores.items() if score > THRESHOLD]
     
-    # ★★★ ここからが翻訳処理！ ★★★
-    # 翻訳辞書(translation_map)を使って、英語タグを日本語に変換！
-    # もし辞書にない単語だったら、そのまま英語タグを使う
+    # 翻訳辞書を使って日本語に変換
     translated_tags = [translation_map.get(tag, tag) for tag in predicted_tags]
-    # ★★★ ここまで ★★★
     
-    # 翻訳済みのタグリストを返す
     return translated_tags

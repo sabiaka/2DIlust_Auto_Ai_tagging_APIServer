@@ -1,7 +1,11 @@
-# Auto AI Tag - 画像自動タグ付けAPIサーバー
+# 2DIlust_Auto_Ai_tagging_APIServer - 画像自動タグ付けAPIサーバー
 
 このプロジェクトは、画像をアップロードすると自動的にタグを付けてくれるFastAPIベースのサーバーです。
 [2DIlust_Auto_Ai_tagging_Client](https://github.com/sabiaka/2DIlust_Auto_Ai_tagging_Client)との連携を想定して開発されています。
+
+## 使用モデル
+
+このプロジェクトは [wd-eva02-large-tagger-v3](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/tree/main) モデルを使用して画像の自動タグ付けを行います。このモデルは高精度な画像認識とタグ付けに特化しており、2Dイラストのタグ付けに最適化されています。
 
 ## 機能
 
@@ -29,7 +33,7 @@
 
 1. **必要ファイルのダウンロード**
 
-    [model.onnx](https://huggingface.co/fancyfeast/joytag/resolve/main/model.onnx?download=true) と [model.safetensors](https://huggingface.co/fancyfeast/joytag/resolve/main/model.safetensors?download=true) を`models_data`の中に入れる。
+   [model.safetensors](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/model.safetensors?download=true) を`models_data`の中に入れる。
 
 2. **Docker Composeで起動**
    ```bash

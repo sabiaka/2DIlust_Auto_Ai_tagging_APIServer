@@ -8,3 +8,4 @@ onnxruntime-gpu
 transformers
 einops
 safetensors
+timm
