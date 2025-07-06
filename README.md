@@ -10,7 +10,7 @@
 ## 機能
 
 - 画像の自動タグ付け
-- 英語タグから日本語への自動翻訳
+- 英語タグから日本語への自動翻訳　(自動翻訳のため精度微妙)
 - RESTful API エンドポイント
 - Docker対応
 - GPU対応（CUDA）
@@ -28,10 +28,10 @@
 1. **リポジトリをクローン**
    ```bash
    git clone <repository-url>
-   cd auto_aitag
+   cd 2DIlust_Auto_Ai_tagging_APIServer
    ```
 
-1. **必要ファイルのダウンロード**
+2. **必要ファイルのダウンロード**
 
    [model.safetensors](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/model.safetensors?download=true) を`models_data`の中に入れる。
 
@@ -73,7 +73,7 @@ curl -X POST "http://localhost:8000/tag" \
 ## ファイル構成
 
 ```
-auto_aitag/
+2DIlust_Auto_Ai_tagging_APIServer/
 ├── main.py              # FastAPIサーバーのメインファイル
 ├── tagger.py            # 画像タグ付けのロジック
 ├── Models.py            # 機械学習モデルの定義
@@ -94,4 +94,4 @@ auto_aitag/
 - **機械学習**: PyTorch
 - **画像処理**: Pillow
 - **GPU対応**: CUDA（利用可能な場合）
-- **モデル**: カスタムVision Transformer
+- **モデル**: wd-eva02-large-tagger-v3 (EVA-02アーキテクチャ)
