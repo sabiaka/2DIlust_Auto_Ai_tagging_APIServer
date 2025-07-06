@@ -365,7 +365,7 @@ tag_id,name,category,count,japanese_name
 374620,black_bikini,0,93679,黒ビキニ
 5565,:3,0,93246,:3
 3918,4koma,0,92575,4コマ
-3449,heterochromia,0,91354,虹彩異色症
+3449,heterochromia,0,91354,オッドアイ
 460262,depth_of_field,0,91237,被写界深度
 420531,nose_blush,0,90911,鼻が赤くなる
 1345229,white_headwear,0,90842,白い帽子
@@ -1371,7 +1371,7 @@ tag_id,name,category,count,japanese_name
 471181,eyeliner,0,17928,アイライナー
 461529,apple,0,17919,りんご
 578430,floral_background,0,17896,花の背景
-1602539,vision_(genshin_impact),0,17881,ビジョン_(原神インパクト)
+1602539,vision_(genshin_impact),0,17881,甘雨（原神）
 1256690,suspender_skirt,0,17880,サスペンダースカート
 680569,foot_focus,0,17850,足フォーカス
 420598,highleg_panties,0,17840,ハイレグパンツ
@@ -6139,7 +6139,7 @@ tag_id,name,category,count,japanese_name
 412162,bucket_hat,0,1228,バケットハット
 4910,corn,0,1227,トウモロコシ
 646003,curled_fingers,0,1227,丸まった指
-1734694,musou_isshin_(genshin_impact),0,1227,musou_isshin_(原神_impact)
+1734694,musou_isshin_(genshin_impact),0,1227,夢想の一心(原神)
 16756,aquarium,0,1225,水族館
 5248,snowball,0,1225,雪玉
 10673,vore,0,1225,ボア
@@ -8541,7 +8541,7 @@ tag_id,name,category,count,japanese_name
 1631521,zuihou_(kancolle),4,3567,瑞鳳（艦これ）
 1649152,cu_chulainn_(fate/stay_night),4,3560,クー・フーリン（Fate/stay night）
 1500444,commander_(azur_lane),4,3546,指揮官（アズールレーン）
-1757377,yelan_(genshin_impact),4,3534,イェラン（原神）
+1757377,yelan_(genshin_impact),4,3534,夜蘭（原神）
 1770074,inoue_takina,4,3521,井上滝奈
 593780,super_sonico,4,3516,すーぱーそに子
 1630645,fairy_(kancolle),4,3511,妖精（艦これ）
@@ -8590,7 +8590,7 @@ tag_id,name,category,count,japanese_name
 1507493,maya_(kancolle),4,3273,摩耶（艦これ）
 421104,eila_ilmatar_juutilainen,4,3269,エイラ・イルマタル・ユーティライネン
 1667136,ump45_(girls'_frontline),4,3266,UMP45（ガールズフロントライン）
-1599614,jean_(genshin_impact),4,3261,ジャン（原神）
+1599614,jean_(genshin_impact),4,3261,ジン（原神）
 1644992,manhattan_cafe_(umamusume),4,3260,マンハッタンカフェ（ウマ娘）
 12355,uzumaki_naruto,4,3259,うずまきナルト
 1799218,trailblazer_(honkai:_star_rail),4,3258,トレイルブレイザー（崩壊：スターレイル）
@@ -9301,7 +9301,7 @@ tag_id,name,category,count,japanese_name
 1627803,yang_guifei_(fate),4,1532,楊貴妃（Fate）
 1515526,serizawa_asahi,4,1529,芹沢あさひ
 1627248,shun_(blue_archive),4,1529,シュン（ブルーアーカイブ）
-1409820,ezo_red_fox_(kemono_friends),4,1528,エゾギツネ（けものフレンズ）
+1409820,ezo_red_fox_(kemono_friends),4,1528,キタキツネ（けものフレンズ）
 1644977,agnes_digital_(umamusume),4,1526,アグネスデジタル（ウマ娘）
 1627695,marie_antoinette_(fate),4,1525,マリー・アントワネット（Fate）
 1627756,scathach_skadi_(fate),4,1525,スカサハ＝スカディ（Fate）
@@ -9393,7 +9393,7 @@ tag_id,name,category,count,japanese_name
 1688526,kokona_(blue_archive),4,1438,ココナ（ブルーアーカイブ）
 1288044,popuko,4,1435,ポプ子
 1724523,irida_(pokemon),4,1434,イリダ（ポケモン）
-1768187,saki_(blue_archive),4,1434,咲（ブルーアーカイブ）
+1768187,saki_(blue_archive),4,1434,サキ（ブルーアーカイブ）
 1438046,android_21,4,1433,アンドロイド21
 935913,alice_margatroid_(pc-98),4,1432,アリス・マーガトロイド（PC-98）
 1462223,hatoba_tsugu,4,1432,はとばつぐ
@@ -9547,7 +9547,7 @@ tag_id,name,category,count,japanese_name
 587823,tsurumaki_maki,4,1296,鶴巻真紀
 601379,takagi-san,4,1296,高木さん
 1933141,hakui_koyori_(1st_costume),4,1296,白衣こより（1st衣装）
-1407495,eurasian_eagle_owl_(kemono_friends),4,1295,ユーラシアワシミミズク（けものフレンズ）
+1407495,eurasian_eagle_owl_(kemono_friends),4,1295,ワシミミズク（けものフレンズ）
 1589614,pochita_(chainsaw_man),4,1295,ポチタ（チェーンソーマン）
 599168,hourai_doll,4,1293,蓬莱人形
 1639053,fubuki_kai_ni_(kancolle),4,1293,吹雪改二（艦これ）
@@ -9671,7 +9671,7 @@ tag_id,name,category,count,japanese_name
 1541815,rabbit_yukine,4,1191,ラビットゆきね
 1933109,amane_kanata_(1st_costume),4,1191,天音かなた（1st衣装）
 425769,leafeon,4,1190,リーフィア
-1405299,emperor_penguin_(kemono_friends),4,1190,皇帝ペンギン（けものフレンズ）
+1405299,emperor_penguin_(kemono_friends),4,1190,コウテイペンギン（けものフレンズ）
 1682889,wakamo_(blue_archive),4,1190,ワカモ（ブルーアーカイブ）
 402795,meowth,4,1189,ニャース
 1391739,karna_(fate),4,1189,カルナ（Fate）
@@ -10147,7 +10147,7 @@ tag_id,name,category,count,japanese_name
 890228,alisa_(girls_und_panzer),4,902,アリサ（ガールズ＆パンツァー）
 1412894,tsurumaki_kokoro,4,902,鶴巻こころ
 1627523,bradamante_(fate),4,901,ブラダマンテ（フェイト）
-1610738,island_fox_(kemono_friends),4,901,アイランドフォックス（けものフレンズ）
+1610738,island_fox_(kemono_friends),4,901,シマハイイロギツネ（けものフレンズ）
 1478519,cu_chulainn_(caster)_(fate),4,899,クー・フーリン（キャスター）（フェイト）
 1650598,mejiro_ardan_(umamusume),4,899,メジロアルダン（ウマ娘）
 597426,eirika_(fire_emblem),4,898,エイリーク（ファイアーエムブレム）
@@ -10256,7 +10256,7 @@ tag_id,name,category,count,japanese_name
 606793,alastor_(shakugan_no_shana),4,859,アラストル（灼眼のシャナ）
 1267895,ayane_(doa),4,859,あやね（デッド・オア・アライブ）
 491993,chibi_miku,4,859,ちびミク
-1408788,brown_bear_(kemono_friends),4,859,ブラウンベア（けものフレンズ）
+1408788,brown_bear_(kemono_friends),4,859,ヒグマ（けものフレンズ）
 1579297,male_doctor_(arknights),4,858,男性医師（アークナイツ）
 1933145,takane_lui_(1st_costume),4,858,高嶺ルイ（1st衣装）
 1667232,rpk-16_(girls'_frontline),4,857,RPK-16（ドールズフロントライン）
@@ -10296,7 +10296,7 @@ tag_id,name,category,count,japanese_name
 1924186,kirara_(genshin_impact),4,847,キララ（原神）
 1505029,leonardo_da_vinci_(rider)_(fate),4,846,レオナルド・ダ・ヴィンチ（ライダー）（フェイト）
 1962907,navia_(genshin_impact),4,846,ナヴィア（原神）
-1665104,sayu_(genshin_impact),4,845,サユ（原神）
+1665104,sayu_(genshin_impact),4,845,早柚（原神）
 1663193,white_rabbit_(alice_in_wonderland),4,844,白ウサギ（不思議の国のアリス）
 1490217,homu_(honkai_impact),4,844,ホム（崩壊インパクト）
 1533069,rhea_(fire_emblem),4,844,レア（ファイアーエムブレム）
@@ -10378,7 +10378,7 @@ tag_id,name,category,count,japanese_name
 1302247,sawamura_spencer_eriri,4,817,澤村・スペンサー・英梨々
 622721,korra,4,816,コラ
 1305340,morgana_(persona_5),4,816,モルガナ（ペルソナ5）
-1405052,moose_(kemono_friends),4,816,ムース（けものフレンズ）
+1405052,moose_(kemono_friends),4,816,ヘラジカ（けものフレンズ）
 2026816,yi_sang_(project_moon),4,815,イ・サン（プロジェクトムーン）
 16312,tenjou_utena,4,814,天上ウテナ
 445911,magnemite,4,813,コイル
@@ -10777,7 +10777,7 @@ tag_id,name,category,count,japanese_name
 422385,wingull,4,666,キャモメ
 693558,emmet_(pokemon),4,665,クダリ（ポケモン）
 1631014,i-14_(kancolle),4,665,I-14（艦これ）
-1409004,african_wild_dog_(kemono_friends),4,665,アフリカオオカミ（けものフレンズ）
+1409004,african_wild_dog_(kemono_friends),4,665,リカオン（けものフレンズ）
 1530808,frostleaf_(arknights),4,665,フロストリーフ（アークナイツ）
 1930563,nekomata_okayu_(3rd_costume),4,665,猫又おかゆ（3rd衣装）
 1793084,seele_(honkai:_star_rail),4,665,ゼーレ（崩壊：スターレイル）
