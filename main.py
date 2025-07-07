@@ -7,6 +7,7 @@ from PIL import Image
 from typing import List
 import logging
 import traceback
+from psd_tools import PSDImage
 
 logger = logging.getLogger("uvicorn")
 
@@ -28,7 +29,13 @@ async def create_tags(file: UploadFile = File(...)):
 
     try:
         image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes))
+        # PSD対応: 拡張子またはMIMEタイプで判定
+        if file.filename.lower().endswith('.psd') or file.content_type == 'image/vnd.adobe.photoshop':
+            psd = PSDImage.open(io.BytesIO(image_bytes))
+            # 表示用に統合画像を取得
+            image = psd.composite()
+        else:
+            image = Image.open(io.BytesIO(image_bytes))
 
         # tagger.pyから正しい形のリストが返ってくる！
         tags_list = predict(image)

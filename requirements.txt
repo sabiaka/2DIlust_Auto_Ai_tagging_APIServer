@@ -10,3 +10,4 @@ transformers
 einops
 safetensors
 timm
+psd-tools
