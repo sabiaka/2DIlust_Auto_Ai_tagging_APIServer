@@ -1,8 +1,8 @@
 tag_id,name,category,count,japanese_name
 9999999,general,9,1589178,全年齢向け
 9999998,sensitive,9,3994361,センシティブ 
-9999997,questionable,9,892496,疑わしい
-9999996,explicit,9,706509,明示的
+9999997,questionable,9,892496,R-15
+9999996,explicit,9,706509,R-18
 470575,1girl,0,5113288,1人の女の子
 212816,solo,0,4253220,ソロ
 13197,long_hair,0,3645082,ロングヘア
@@ -714,7 +714,7 @@ tag_id,name,category,count,japanese_name
 11879,blouse,0,43095,ブラウス
 376491,wet_clothes,0,43081,濡れた服
 464568,musical_note,0,42823,音符
-1532466,colored_inner_hair,0,42796,色のついた髪の内側
+1532466,colored_inner_hair,0,42796,インナーカラー
 602295,hair_over_shoulder,0,42714,肩越しの髪
 4555,ejaculation,0,42557,射精
 395223,scenery,0,42503,景色
@@ -9364,7 +9364,7 @@ tag_id,name,category,count,japanese_name
 10082,sephiroth,4,1468,セフィロス
 1374966,kamado_tanjirou,4,1468,竈門炭治郎
 1630559,enemy_aircraft_(kancolle),4,1467,敵機（艦これ）
-542683,sonya_(kill_me_baby),4,1466,ソニア（キルミーベイビー）
+542683,sonya_(kill_me_baby),4,1466,ソニア（キルミーベイベー）
 1667146,g11_(girls'_frontline),4,1464,G11（ドールズフロントライン）
 2008086,osakabehime_(fate),4,1464,豪姫（Fate）
 1630726,hayashimo_(kancolle),4,1463,早霜（艦これ）

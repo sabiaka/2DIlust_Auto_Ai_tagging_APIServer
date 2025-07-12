@@ -6,11 +6,14 @@ ENV PYTHONUNBUFFERED 1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 必要なツールとPythonをインストール
+# ↓↓↓ ここに最後の部品を追加！ ↓↓↓
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3.10 \
     python3-pip \
     python3-venv \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # python3 -> python になるようにシンボリックリンクを作成
@@ -27,5 +30,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # プロジェクトのファイルを全部コピー
 COPY . .
 
-# サーバーを起動するコマンド
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# サーバーが使うポート番号を教えてあげる
+EXPOSE 8000
+
+# このコンテナが起動した時に実行するコマンド
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -5,11 +5,20 @@ services:
     ports:
       - "8000:8000"
     
-    # ★★★★★ ここから追加！ ★★★★★
-    volumes:
-      # 「PCの今のフォルダ(.)」を「コンテナの/appフォルダ」に同期させる
-      - .:/app
-    # ★★★★★ ここまで追加！ ★★★★★
+    # ★★★ ここから下が魔改造ポイント！ ★★★
+    
+    # 起動コマンドから --reload を一旦削除！
+    # これでシンプルにサーバーが起動するか試す
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    
+    # コンテナがちゃんと生きてるかチェックする機能を追加
+    healthcheck:
+      # 30秒ごとに「curl http://localhost:8000」を試して！
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s    # チェックの間隔
+      timeout: 10s     # タイムアウトまでの時間
+      retries: 3       # 失敗した場合に3回までリトライ
+      start_period: 60s # コンテナ起動後、チェック開始まで60秒待つ（モデルロード用）
 
     deploy:
       resources:
