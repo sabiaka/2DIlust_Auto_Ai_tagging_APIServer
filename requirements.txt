@@ -12,3 +12,4 @@ safetensors
 timm
 psd-tools
 opencv-python
+scenedetect

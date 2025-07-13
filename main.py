@@ -4,31 +4,31 @@ import io
 import cv2
 import numpy as np
 import math
+import collections # タグの回数を数えるのに便利なライブラリ
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 from PIL import Image
-from typing import List
+from typing import List, Dict
 import logging
 import traceback
 from psd_tools import PSDImage
 
-logger = logging.getLogger("uvicorn")
+# シーン検出ライブラリ
+from scenedetect import open_video, SceneManager
+from scenedetect.detectors import ContentDetector
 
-# predictだけじゃなくて、ロード用の関数もインポート！
 from tagger import predict, load_model_and_tags
 
+logger = logging.getLogger("uvicorn")
+
 app = FastAPI(
-    title="動画もイケる！最強タギングAPIサーバー",
-    description="画像も動画もどんと来い！なタグ付けAPIサーバーだよ✨",
-    version="1.1.0",
+    title="動画シーン最適化タギングAPIサーバー",
+    description="シーン分析でノイズを除去し、最強の一つのタグリストを返すAPIサーバー✨",
+    version="2.2.0", # さらに進化した！
 )
 
-# --- ★★★ ここが超重要！ ★★★ ---
 @app.on_event("startup")
 async def startup_event():
-    """
-    アプリが起動した時に一度だけ実行される処理
-    """
     logger.info("サーバー起動！モデルとタグをロードするよ...💪")
     load_model_and_tags()
     logger.info("🚀 準備完了！リクエスト待ってるよ！")
@@ -45,49 +45,80 @@ async def create_tags(file: UploadFile = File(...)):
         file_bytes = await file.read()
 
         if file.content_type.startswith("video/"):
-            logger.info("動画ファイル検知！フレームごとの処理を開始するよ🚀")
-            with open("temp_video.mp4", "wb") as f:
+            logger.info("動画ファイル検知！シーン分析を開始するよ🚀")
+            
+            temp_video_path = "temp_video.mp4"
+            with open(temp_video_path, "wb") as f:
                 f.write(file_bytes)
             
-            video_capture = cv2.VideoCapture("temp_video.mp4")
+            video = open_video(temp_video_path)
+            scene_manager = SceneManager()
+            scene_manager.add_detector(ContentDetector(threshold=27.0))
+            scene_manager.detect_scenes(video=video, show_progress=True)
+            scene_list = scene_manager.get_scene_list()
+            
+            if not scene_list:
+                scene_list = [(video.base_timecode, video.duration)]
+                logger.warning("シーンの切れ目が見つからなかったから、動画全体を1つのシーンとして扱うね！")
+
+            logger.info(f"{len(scene_list)}個のシーンが見つかったよ！")
+
+            video_capture = cv2.VideoCapture(temp_video_path)
             fps = video_capture.get(cv2.CAP_PROP_FPS)
-            if fps == 0:
-                fps = 30
-                logger.warning("FPSが取得できなかったから、仮で30fpsとして処理するね！")
-
-            frame_interval = math.ceil(fps / 2)
-            logger.info(f"動画FPS: {fps}, 処理間隔: {frame_interval}フレームごと (約0.5秒に1回)")
-
-            all_tags = []
-            frame_count = 0
+            if fps == 0: fps = 30
             
-            while video_capture.isOpened():
-                success, frame = video_capture.read()
-                if not success:
-                    break
-                if frame_count % frame_interval == 0:
-                    logger.info(f"✅ フレーム {frame_count} を処理中...")
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    image = Image.fromarray(rgb_frame)
-                    tags_in_frame = predict(image)
-                    all_tags.extend(tags_in_frame)
-                frame_count += 1
-            
+            overall_true_tags = []
+
+            for i, scene in enumerate(scene_list):
+                start_frame = scene[0].get_frames()
+                end_frame = scene[1].get_frames()
+
+                logger.info(f"🎬 シーン{i+1} (フレーム {start_frame}～{end_frame}) を処理中...")
+                
+                frame_interval = math.ceil(fps / 2)
+                
+                scene_all_tags = []
+                key_frame_count = 0
+
+                for frame_idx in range(start_frame, end_frame, frame_interval):
+                    key_frame_count += 1
+                    video_capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                    success, frame = video_capture.read()
+                    if success:
+                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        image = Image.fromarray(rgb_frame)
+                        tags_in_frame = predict(image)
+                        scene_all_tags.extend(tags_in_frame)
+                
+                # --- ★★★ ここが最終奥義！登場率でフィルター！ ★★★ ---
+                # このシーンでキーフレームの40%以上で出現したタグだけを「本物」と認定！
+                MIN_APPEARANCE_RATIO = 0.5 # この数字をいじれば、間引き具合を調整できるよ！
+
+                if key_frame_count == 0:
+                    true_tags_for_scene = []
+                else:
+                    # Counterを使うと、各タグの登場回数を数えるのが楽ちん！
+                    tag_counts = collections.Counter(scene_all_tags)
+                    true_tags_for_scene = [
+                        tag for tag, count in tag_counts.items() 
+                        if (count / key_frame_count) >= MIN_APPEARANCE_RATIO
+                    ]
+                # --- ★★★ ここまで！ ★★★
+
+                logger.info(f"  -> このシーンの「本物」タグ: {true_tags_for_scene}")
+                overall_true_tags.extend(true_tags_for_scene)
+
             video_capture.release()
             
-            final_tags = sorted(list(set(all_tags)))
-            logger.info(f"✨ 動画全体のユニークタグ: {final_tags}")
+            final_tags = sorted(list(set(overall_true_tags)))
+            
+            logger.info(f"✨ 動画全体の最終タグリスト: {final_tags}")
             return TagResponse(tags=final_tags)
+
         else:
             logger.info("画像ファイルを処理するよ！")
-            if file.filename.lower().endswith('.psd') or file.content_type == 'image/vnd.adobe.photoshop':
-                psd = PSDImage.open(io.BytesIO(file_bytes))
-                image = psd.composite()
-            else:
-                image = Image.open(io.BytesIO(file_bytes))
-
+            image = Image.open(io.BytesIO(file_bytes))
             tags_list = predict(image)
-            logger.info(f"✨ 画像のタグ: {tags_list}")
             return TagResponse(tags=tags_list)
 
     except Exception as e:
