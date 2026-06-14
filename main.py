@@ -17,7 +17,7 @@ from psd_tools import PSDImage
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
-from tagger import predict, load_model_and_tags
+from tagger import get_tagger_info, predict, load_model_and_tags
 
 logger = logging.getLogger("uvicorn")
 
@@ -35,6 +35,10 @@ async def startup_event():
 
 class TagResponse(BaseModel):
     tags: List[str]
+
+@app.get("/tagger-info")
+async def tagger_info():
+    return get_tagger_info()
 
 @app.post("/tag", response_model=TagResponse)
 async def create_tags(file: UploadFile = File(...)):

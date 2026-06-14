@@ -1,123 +1,170 @@
-# tagger.py
-
-import torch
-import timm
-import onnxruntime
-import numpy as np
-import torchvision.transforms.functional as TVF
-from PIL import Image
-from pathlib import Path
-from typing import List, Dict, Any, Optional # Optionalを追加！
 import csv
-import json
 import logging
+import os
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+from PIL import Image
 
 logger = logging.getLogger("uvicorn")
 
-MODEL_PATH = Path('./models_data')
-SAFETENSORS_MODEL_FILE = MODEL_PATH / 'model.safetensors'
-ONNX_MODEL_FILE = MODEL_PATH / 'model.onnx'
-CONFIG_FILE = MODEL_PATH / 'config.json'
-TAG_FILE = MODEL_PATH / 'selected_tags.csv'
+MODEL_PATH = Path("./models_data")
+SAFETENSORS_MODEL_FILE = MODEL_PATH / "model.safetensors"
+ONNX_MODEL_FILE = MODEL_PATH / "model.onnx"
+CONFIG_FILE = MODEL_PATH / "config.json"
+TAG_FILE = MODEL_PATH / "selected_tags.csv"
+EXTRA_TAG_TRANSLATION_FILE = Path(os.getenv("EXTRA_TAG_TRANSLATION_FILE", MODEL_PATH / "tag_translations_extra.csv"))
+GENERATED_TRANSLATION_FILES = [
+    MODEL_PATH / "pixai_missing_character_translations.csv",
+    MODEL_PATH / "pixai_missing_translations.csv",
+]
 
-THRESHOLD = 0.35
-DEVICE = 'cuda' if 'CUDAExecutionProvider' in onnxruntime.get_available_providers() else 'cpu'
+TAGGER_BACKEND = os.getenv("TAGGER_BACKEND", "pixai").strip().lower()
+PIXAI_MODEL_NAME = os.getenv("PIXAI_MODEL_NAME", "v0.9")
+PIXAI_GENERAL_THRESHOLD = float(os.getenv("PIXAI_GENERAL_THRESHOLD", "0.30"))
+PIXAI_CHARACTER_THRESHOLD = float(os.getenv("PIXAI_CHARACTER_THRESHOLD", "0.75"))
+WD_THRESHOLD = float(os.getenv("WD_THRESHOLD", "0.35"))
 
-# --- グローバル変数を Optional に変更！ ---
-ort_session: Optional[onnxruntime.InferenceSession] = None
+ort_session: Optional[object] = None
 tags_list: List[str] = []
 translation_map: Dict[str, str] = {}
-input_size: int = 448 # デフォルト値
+input_size: int = 448
+pixai_tagger = None
 
-def ensure_onnx_model_exists():
-    if ONNX_MODEL_FILE.exists():
-        logger.info(f"✅ `{ONNX_MODEL_FILE}` 発見！変換はスキップするね。")
-        return
-    logger.warning(f"⚠️ `{ONNX_MODEL_FILE}` が見つからない！今からsafetensorsから変換するよ。ちょっと待っててね…")
-    if not SAFETENSORS_MODEL_FILE.exists():
-        logger.error(f"❌ うそ…肝心の `{SAFETENSORS_MODEL_FILE}` もないじゃん！モデルをダウンロードしてきて！")
-        raise FileNotFoundError(f"{SAFETENSORS_MODEL_FILE} not found.")
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            config = json.load(f)
-    except FileNotFoundError:
-        logger.error(f"❌ `{CONFIG_FILE}` がないよ！モデルと一緒に配布されてるはずだから確認して！")
-        raise
-    logger.info("モデルの骨格をtimmで作成中...")
-    model = timm.create_model(
-        'eva02_large_patch14_448.mim_in22k_ft_in22k_in1k',
-        pretrained=False,
-        num_classes=config['n_tags']
-    )
-    logger.info("safetensorsから魂（おもみ）をロード中...")
-    from safetensors.torch import load_file
-    state_dict = load_file(SAFETENSORS_MODEL_FILE, device='cpu')
-    model.load_state_dict(state_dict)
-    model.eval()
-    
-    image_size = config.get('image_size', 448)
-    dummy_input = torch.randn(1, 3, image_size, image_size, requires_grad=True)
-    logger.info("✨ ONNXに変身開始！これが結構時間かかるかも… ✨")
-    torch.onnx.export(
-        model, dummy_input, str(ONNX_MODEL_FILE), export_params=True, opset_version=14,
-        do_constant_folding=True, input_names=['input'], output_names=['output'],
-        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
-    )
-    logger.info(f"🎉 爆速ONNXモデル `{ONNX_MODEL_FILE}` の作成完了！ 🎉")
 
-# --- ★★★ここからが本番！モデル読み込みを関数化★★★ ---
-def load_model_and_tags():
-    """
-    モデルとタグをロードして、グローバル変数に設定する関数
-    """
-    global ort_session, tags_list, translation_map, input_size
+def _normalize_tag(tag: str) -> str:
+    return tag.replace("_", " ").strip()
 
-    # 1. ONNXモデルがなかったら作る
-    ensure_onnx_model_exists()
 
-    # 2. ONNXモデルをロード
-    logger.info(f"Loading ONNX model from {ONNX_MODEL_FILE} on {DEVICE}...")
-    providers = ['CUDAExecutionProvider'] if DEVICE == 'cuda' else ['CPUExecutionProvider']
-    ort_session = onnxruntime.InferenceSession(str(ONNX_MODEL_FILE), providers=providers)
-    input_size = ort_session.get_inputs()[0].shape[-1]
-    logger.info("✅ ONNXモデルのロード完了！")
+def _translate_tag(tag: str) -> str:
+    normalized = _normalize_tag(tag)
+    return translation_map.get(normalized, normalized)
 
-    # 3. タグリストと翻訳辞書を作成
-    if not TAG_FILE.exists():
-        logger.error(f"❌ {TAG_FILE} が見つからない！処理を中断するね。")
-        raise FileNotFoundError(f"{TAG_FILE} が見つからないよ！")
 
-    with open(TAG_FILE, 'r', encoding='utf-8') as f:
+def _load_translation_map() -> None:
+    tags_list.clear()
+    translation_map.clear()
+
+    if TAG_FILE.exists():
+        _load_translation_csv(TAG_FILE, append_to_tags_list=True)
+    else:
+        logger.warning("%s is missing; built-in Japanese translations will be skipped.", TAG_FILE)
+
+    if EXTRA_TAG_TRANSLATION_FILE.exists():
+        _load_translation_csv(EXTRA_TAG_TRANSLATION_FILE, append_to_tags_list=False)
+        logger.info("Loaded extra tag translations from %s.", EXTRA_TAG_TRANSLATION_FILE)
+
+    for path in GENERATED_TRANSLATION_FILES:
+        if path.exists():
+            _load_translation_csv(path, append_to_tags_list=False)
+
+
+def _load_translation_csv(path: Path, append_to_tags_list: bool) -> None:
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         header = next(reader)
-        name_index = header.index('name')
-        japanese_name_index = -1
-        if 'japanese_name' in header:
-            japanese_name_index = header.index('japanese_name')
-        else:
-             logger.warning("⚠️ 'japanese_name'列が見つからなかったから、翻訳機能はオフになるよ。")
-        
-        # tags_listとtranslation_mapをクリアしてから追加する
-        tags_list.clear()
-        translation_map.clear()
+        name_index = header.index("name")
+        japanese_name_index = header.index("japanese_name") if "japanese_name" in header else -1
 
         for row in reader:
             try:
-                english_tag = row[name_index].replace('_', ' ')
-                tags_list.append(english_tag)
+                english_tag = _normalize_tag(row[name_index])
+                if append_to_tags_list:
+                    tags_list.append(english_tag)
                 if japanese_name_index != -1 and row[japanese_name_index]:
                     translation_map[english_tag] = row[japanese_name_index]
             except IndexError:
                 continue
-    logger.info("✅ タグリストと翻訳辞書の読み込み完了！")
+
+
+def ensure_onnx_model_exists() -> None:
+    if ONNX_MODEL_FILE.exists():
+        logger.info("Found %s; skipping ONNX export.", ONNX_MODEL_FILE)
+        return
+
+    if not SAFETENSORS_MODEL_FILE.exists():
+        raise FileNotFoundError(f"{SAFETENSORS_MODEL_FILE} not found.")
+
+    import json
+
+    import timm
+    import torch
+    from safetensors.torch import load_file
+
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    logger.info("Exporting legacy WD tagger to ONNX...")
+    model = timm.create_model(
+        "eva02_large_patch14_448.mim_in22k_ft_in22k_in1k",
+        pretrained=False,
+        num_classes=config["n_tags"],
+    )
+    state_dict = load_file(SAFETENSORS_MODEL_FILE, device="cpu")
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    image_size = config.get("image_size", 448)
+    dummy_input = torch.randn(1, 3, image_size, image_size, requires_grad=True)
+    torch.onnx.export(
+        model,
+        dummy_input,
+        str(ONNX_MODEL_FILE),
+        export_params=True,
+        opset_version=14,
+        do_constant_folding=True,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
+    )
+    logger.info("Saved ONNX model to %s.", ONNX_MODEL_FILE)
+
+
+def load_model_and_tags() -> None:
+    global ort_session, input_size, pixai_tagger
+
+    _load_translation_map()
+
+    if TAGGER_BACKEND == "pixai":
+        try:
+            from imgutils.tagging.pixai import get_pixai_tags
+        except ImportError as exc:
+            raise RuntimeError(
+                "TAGGER_BACKEND=pixai requires dghs-imgutils. "
+                "Install requirements.txt or set TAGGER_BACKEND=wd to use the legacy model."
+            ) from exc
+
+        pixai_tagger = get_pixai_tags
+        logger.info(
+            "TAGGER_BACKEND=pixai: using PixAI Tagger %s (general threshold %.2f, character threshold %.2f).",
+            PIXAI_MODEL_NAME,
+            PIXAI_GENERAL_THRESHOLD,
+            PIXAI_CHARACTER_THRESHOLD,
+        )
+        return
+
+    if TAGGER_BACKEND != "wd":
+        raise ValueError("TAGGER_BACKEND must be either 'pixai' or 'wd'.")
+
+    import onnxruntime
+
+    ensure_onnx_model_exists()
+    device = "cuda" if "CUDAExecutionProvider" in onnxruntime.get_available_providers() else "cpu"
+    providers = ["CUDAExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
+    logger.info("Loading legacy WD ONNX model from %s on %s...", ONNX_MODEL_FILE, device)
+    ort_session = onnxruntime.InferenceSession(str(ONNX_MODEL_FILE), providers=providers)
+    input_size = ort_session.get_inputs()[0].shape[-1]
 
 
 def prepare_image(image: Image.Image, target_size: int) -> np.ndarray:
+    import torchvision.transforms.functional as TVF
+
     image_shape = image.size
     max_dim = max(image_shape)
     pad_left = (max_dim - image_shape[0]) // 2
     pad_top = (max_dim - image_shape[1]) // 2
-    padded_image = Image.new('RGB', (max_dim, max_dim), (255, 255, 255))
+    padded_image = Image.new("RGB", (max_dim, max_dim), (255, 255, 255))
     padded_image.paste(image, (pad_left, pad_top))
     if max_dim != target_size:
         padded_image = padded_image.resize((target_size, target_size), Image.BICUBIC)
@@ -125,18 +172,64 @@ def prepare_image(image: Image.Image, target_size: int) -> np.ndarray:
     image_tensor = TVF.normalize(image_tensor, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     return image_tensor.numpy()
 
-def predict(image: Image.Image) -> List[str]:
+
+def _predict_pixai(image: Image.Image) -> List[str]:
+    if pixai_tagger is None:
+        raise RuntimeError("PixAI tagger is not loaded. Call load_model_and_tags() first.")
+
+    thresholds = {
+        "general": PIXAI_GENERAL_THRESHOLD,
+        "character": PIXAI_CHARACTER_THRESHOLD,
+    }
+    general_tags, character_tags, ips = pixai_tagger(
+        image.convert("RGB"),
+        model_name=PIXAI_MODEL_NAME,
+        thresholds=thresholds,
+        fmt=("general", "character", "ips"),
+    )
+
+    ordered_tags: List[str] = []
+    for tag_group in (character_tags, general_tags):
+        ordered_tags.extend(tag_group.keys())
+    ordered_tags.extend(ips)
+
+    seen = set()
+    translated_tags = []
+    for tag in ordered_tags:
+        translated = _translate_tag(tag)
+        if translated not in seen:
+            seen.add(translated)
+            translated_tags.append(translated)
+    return translated_tags
+
+
+def _predict_wd(image: Image.Image) -> List[str]:
     if ort_session is None:
-        raise RuntimeError("モデルがロードされてないっぽい！先にload_model_and_tags()を呼んでね。")
-    
+        raise RuntimeError("Legacy WD model is not loaded. Call load_model_and_tags() first.")
+
     image_np = prepare_image(image.convert("RGB"), input_size)
     input_name = ort_session.get_inputs()[0].name
     output_name = ort_session.get_outputs()[0].name
-    ort_inputs = {input_name: image_np}
-    ort_outs = ort_session.run([output_name], ort_inputs)[0]
+    ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
     preds = 1 / (1 + np.exp(-ort_outs))
     tag_preds = preds[0]
-    scores = {tags_list[i]: tag_preds[i] for i in range(len(tags_list))}
-    predicted_tags = [tag for tag, score in scores.items() if score > THRESHOLD]
-    translated_tags = [translation_map.get(tag, tag) for tag in predicted_tags]
-    return translated_tags
+    predicted_tags = [tag for tag, score in zip(tags_list, tag_preds) if score > WD_THRESHOLD]
+    return [_translate_tag(tag) for tag in predicted_tags]
+
+
+def predict(image: Image.Image) -> List[str]:
+    if TAGGER_BACKEND == "pixai":
+        return _predict_pixai(image)
+    return _predict_wd(image)
+
+
+def get_tagger_info() -> Dict[str, object]:
+    return {
+        "backend": TAGGER_BACKEND,
+        "pixai_model_name": PIXAI_MODEL_NAME if TAGGER_BACKEND == "pixai" else None,
+        "pixai_general_threshold": PIXAI_GENERAL_THRESHOLD if TAGGER_BACKEND == "pixai" else None,
+        "pixai_character_threshold": PIXAI_CHARACTER_THRESHOLD if TAGGER_BACKEND == "pixai" else None,
+        "wd_threshold": WD_THRESHOLD if TAGGER_BACKEND == "wd" else None,
+        "legacy_onnx_loaded": ort_session is not None,
+        "pixai_loaded": pixai_tagger is not None,
+    }

@@ -4,6 +4,11 @@ services:
     container_name: joytag_api_server
     ports:
       - "8000:8000"
+    environment:
+      TAGGER_BACKEND: pixai
+      PIXAI_MODEL_NAME: v0.9
+      PIXAI_GENERAL_THRESHOLD: "0.30"
+      PIXAI_CHARACTER_THRESHOLD: "0.75"
     
     # ★★★ ここがガチの魔改造ポイント！ ★★★
     
