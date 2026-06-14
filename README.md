@@ -1,97 +1,161 @@
-# 2DIlust_Auto_Ai_tagging_APIServer - 画像自動タグ付けAPIサーバー
+# 2DIlust_Auto_Ai_tagging_APIServer
 
-このプロジェクトは、画像をアップロードすると自動的にタグを付けてくれるFastAPIベースのサーバーです。
-[2DIlust_Auto_Ai_tagging_Client](https://github.com/sabiaka/2DIlust_Auto_Ai_tagging_Client)との連携を想定して開発されています。
+画像・動画・PSDファイルを受け取り、自動でタグ付けするFastAPIサーバーです。
 
-## 使用モデル
-
-このプロジェクトは [wd-eva02-large-tagger-v3](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/tree/main) モデルを使用して画像の自動タグ付けを行います。このモデルは高精度な画像認識とタグ付けに特化しており、2Dイラストのタグ付けに最適化されています。
+現在の標準バックエンドは PixAI Tagger です。旧仕様の `wd-eva02-large-tagger-v3` も `TAGGER_BACKEND=wd` に切り替えることで利用できます。
 
 ## 機能
 
-- 画像の自動タグ付け
-- 英語タグから日本語への自動翻訳　(自動翻訳のため精度微妙)
-- RESTful API エンドポイント
-- Docker対応
-- GPU対応（CUDA）
+- 画像ファイルの自動タグ付け
+- 動画ファイルのシーン分割とタグ集約
+- PSDファイル対応
+- PixAI Tagger対応
+- 英語タグから日本語タグへの変換
+- Docker / Docker Compose対応
+- NVIDIA GPU対応
 
-## セットアップ方法
+## Dockerでセットアップする
 
 ### 前提条件
 
-- Python 3.10以上
-- Docker（Docker Compose使用時）
-- NVIDIA GPU + CUDA（GPU使用時）
+- Docker Desktop または Docker Engine
+- Docker Compose
+- NVIDIA GPUを使う場合:
+  - NVIDIA Driver
+  - NVIDIA Container Toolkit
+  - `docker run --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi` が成功すること
 
-### 使い方
+PixAI Taggerを使う場合、旧WDモデルの `model.safetensors` は不要です。初回起動時に必要なPixAI関連データがダウンロードされるため、ネットワーク接続が必要です。
 
-1. **リポジトリをクローン**
+### 起動手順
+
+1. リポジトリを取得します。
+
    ```bash
    git clone <repository-url>
    cd 2DIlust_Auto_Ai_tagging_APIServer
    ```
 
-2. **必要ファイルのダウンロード**
+2. Dockerイメージをビルドして起動します。
 
-   [model.safetensors](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/model.safetensors?download=true) を`models_data`の中に入れる。
-
-2. **Docker Composeで起動**
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 
-3. **サーバーが起動したら、以下のURLでアクセス可能**
+3. 起動後、APIにアクセスします。
+
    - API: http://localhost:8000
+   - Tagger情報: http://localhost:8000/tagger-info
 
-4. **[2DIlust_Auto_Ai_tagging_Client](https://github.com/sabiaka/2DIlust_Auto_Ai_tagging_Client)から処理を実行**
+4. 動作確認します。
 
+   ```bash
+   curl http://localhost:8000/tagger-info
+   ```
 
+   画像タグ付けの例:
 
-## API使用方法
+   ```bash
+   curl -X POST "http://localhost:8000/tag" \
+        -H "accept: application/json" \
+        -F "file=@your_image.jpg"
+   ```
 
-### 画像タグ付けエンドポイント
+### 停止する
 
-**POST** `/tag`
-
-画像ファイルをアップロードしてタグを取得します。
-
-**リクエスト例:**
 ```bash
-curl -X POST "http://localhost:8000/tag" \
-     -H "accept: application/json" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@your_image.jpg"
+docker compose down
 ```
 
-**レスポンス例:**
+### ログを見る
+
+```bash
+docker compose logs -f joytag-api
+```
+
+## Docker設定
+
+`docker-compose.yml` の既定値ではPixAI Taggerを使います。
+
+```yaml
+environment:
+  TAGGER_BACKEND: pixai
+  PIXAI_MODEL_NAME: v0.9
+  PIXAI_GENERAL_THRESHOLD: "0.30"
+  PIXAI_CHARACTER_THRESHOLD: "0.75"
+```
+
+しきい値を変えたい場合は、`docker-compose.yml` の値を調整してから再起動してください。
+
+```bash
+docker compose up --build
+```
+
+## 旧WDモデルを使う場合
+
+旧仕様の `wd-eva02-large-tagger-v3` を使う場合は、次のファイルを `models_data` に配置します。
+
+- `model.safetensors`
+- `config.json`
+- `selected_tags.csv`
+
+そのうえで `docker-compose.yml` の環境変数を変更します。
+
+```yaml
+environment:
+  TAGGER_BACKEND: wd
+  WD_THRESHOLD: "0.35"
+```
+
+`model.onnx` が存在しない場合は、初回起動時に `model.safetensors` からONNXへ変換します。
+
+## API
+
+### `GET /tagger-info`
+
+現在のタグ付けバックエンドとしきい値を返します。
+
+### `POST /tag`
+
+画像または動画ファイルをアップロードして、タグ一覧を返します。
+
+レスポンス例:
+
 ```json
 {
-  "tags": ["1人の女の子", "ロングヘア", "カメラ目線", "ウサギの耳"]
+  "tags": ["1人の女の子", "ロングヘア", "カメラ目線"]
 }
 ```
 
+## 翻訳CSV
+
+タグの日本語化には以下のCSVを使います。
+
+- `models_data/selected_tags.csv`
+- `models_data/tag_translations_extra.csv`
+- `models_data/pixai_missing_character_translations.csv`
+- `models_data/pixai_missing_translations.csv`
+
+`tagger.py` は起動時にこれらを読み込み、PixAIから返った英語タグを日本語タグへ変換します。
+
 ## ファイル構成
 
-```
+```text
 2DIlust_Auto_Ai_tagging_APIServer/
-├── main.py              # FastAPIサーバーのメインファイル
-├── tagger.py            # 画像タグ付けのロジック
-├── Models.py            # 機械学習モデルの定義
-├── requirements.txt     # Python依存関係
-├── docker-compose.yml   # Docker Compose設定
-├── Dockerfile          # Docker設定
-└── models_data/        # 学習済みモデルとデータ
-    ├── config.json     # モデル設定
-    ├── model.safetensors # 学習済みモデル
-    ├── model.onnx      # ONNX形式モデル
-    ├── top_tags.txt    # タグリスト（英語）
-    └── top_tags.csv    # タグ翻訳辞書
+├── main.py
+├── tagger.py
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── scripts/
+└── models_data/
+    ├── config.json
+    ├── selected_tags.csv
+    ├── tag_translations_extra.csv
+    ├── pixai_missing_character_translations.csv
+    ├── pixai_missing_translations.csv
+    ├── model.safetensors
+    └── model.onnx
 ```
 
-## 技術仕様
-
-- **フレームワーク**: FastAPI
-- **機械学習**: PyTorch
-- **画像処理**: Pillow
-- **GPU対応**: CUDA（利用可能な場合）
-- **モデル**: wd-eva02-large-tagger-v3 (EVA-02アーキテクチャ)
+`model.safetensors` と `model.onnx` は旧WDモデル利用時のみ必要です。
