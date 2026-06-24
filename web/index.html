@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Prompt Lab</title>
+    <link rel="stylesheet" href="/assets/styles.css?v=20260624-aspect-viewer" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Image Prompt Lab</p>
+          <h1>タグ確認と翻訳CSV編集</h1>
+        </div>
+        <span id="backendBadge" class="status-badge">接続確認中</span>
+      </header>
+
+      <nav class="tabs" aria-label="作業画面">
+        <button id="promptTab" class="tab is-active" type="button" data-view="promptView">プロンプト</button>
+        <button id="translationTab" class="tab" type="button" data-view="translationView">CSV翻訳</button>
+      </nav>
+
+      <section id="promptView" class="view is-active">
+        <section class="workspace">
+          <div class="panel upload-panel">
+            <div class="panel-head">
+              <div>
+                <h2>画像を解析</h2>
+              </div>
+            </div>
+
+            <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="画像を選択または表示">
+              <input id="fileInput" type="file" accept="image/*" />
+              <img id="preview" alt="選択した画像のプレビュー" hidden />
+              <span id="dropText">画像を選択またはドロップ</span>
+              <div id="analyzeOverlay" class="analyze-overlay" hidden>
+                <div class="scan-frame">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="scan-copy">
+                  <strong>タグ特徴を解析中</strong>
+                  <small>線画、色、構図、キャラクター候補を照合しています</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button id="analyzeButton" type="button" disabled>解析する</button>
+              <button id="clearButton" type="button" class="ghost" disabled>クリア</button>
+            </div>
+
+            <p id="status" class="status-text">待機中</p>
+          </div>
+
+          <div class="panel result-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>プロンプト</h2>
+              </div>
+              <button id="copyButton" type="button" class="ghost" disabled>コピー</button>
+            </div>
+            <textarea id="promptOutput" spellcheck="false" placeholder="解析後にプロンプトが入ります"></textarea>
+
+            <div class="tag-toolbar">
+              <div>
+                <h2>タグ</h2>
+                <span id="tagCount" class="count">0件</span>
+              </div>
+              <div class="tag-legend" aria-label="タグ状態の凡例">
+                <span>有効</span>
+                <span>無効</span>
+              </div>
+            </div>
+            <div id="tagList" class="tag-list" aria-live="polite"></div>
+
+          </div>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="panel-head compact">
+            <h2>過去の判定</h2>
+            <button id="reloadHistoryButton" type="button" class="ghost">更新</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </section>
+
+      <section id="translationView" class="view" hidden>
+        <div class="panel translation-panel">
+          <div class="translation-top">
+            <div>
+              <h2>翻訳CSVの対応を直す</h2>
+            </div>
+            <button id="reloadTranslationsButton" type="button" class="ghost">再読込</button>
+          </div>
+
+          <div class="translation-controls">
+            <label>
+              CSV
+              <select id="translationFile">
+                <option value="pixai_general">PixAI一般タグ</option>
+                <option value="pixai_character">PixAIキャラクター</option>
+                <option value="extra">追加翻訳</option>
+              </select>
+            </label>
+            <label>
+              検索
+              <input id="translationSearch" type="search" placeholder="tag または 日本語訳" />
+            </label>
+          </div>
+
+          <div class="translation-summary">
+            <span id="translationSummary">読み込み前</span>
+            <span id="translationSaveStatus">変更はここに表示されます</span>
+          </div>
+
+          <div id="translationRows" class="translation-rows"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="imageModal" class="image-modal" hidden>
+      <div class="image-modal-backdrop"></div>
+      <div class="image-modal-surface" role="dialog" aria-modal="true" aria-label="画像ビューア">
+        <button id="closeImageModal" class="modal-icon-button" type="button" aria-label="閉じる">×</button>
+        <div id="imageStage" class="image-stage">
+          <img id="modalImage" alt="拡大表示" draggable="false" />
+        </div>
+        <div class="modal-toolbar">
+          <button id="zoomOutButton" type="button" class="ghost">縮小</button>
+          <input id="zoomSlider" type="range" min="1" max="5" step="0.05" value="1" aria-label="ズーム" />
+          <button id="zoomInButton" type="button" class="ghost">拡大</button>
+          <button id="resetZoomButton" type="button" class="ghost">リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/assets/app.js?v=20260624-aspect-viewer"></script>
+  </body>
+</html>

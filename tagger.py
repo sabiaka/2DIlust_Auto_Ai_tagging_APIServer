@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
 
 import numpy as np
 from PIL import Image
@@ -33,6 +33,14 @@ input_size: int = 448
 pixai_tagger = None
 
 
+class TagDetail(TypedDict, total=False):
+    tag: str
+    prompt_tag: str
+    translated: str
+    category: str
+    score: Optional[float]
+
+
 def _normalize_tag(tag: str) -> str:
     return tag.replace("_", " ").strip()
 
@@ -58,6 +66,10 @@ def _load_translation_map() -> None:
     for path in GENERATED_TRANSLATION_FILES:
         if path.exists():
             _load_translation_csv(path, append_to_tags_list=False)
+
+
+def reload_translations() -> None:
+    _load_translation_map()
 
 
 def _load_translation_csv(path: Path, append_to_tags_list: bool) -> None:
@@ -203,6 +215,49 @@ def _predict_pixai(image: Image.Image) -> List[str]:
     return translated_tags
 
 
+def _predict_pixai_details(image: Image.Image) -> List[TagDetail]:
+    if pixai_tagger is None:
+        raise RuntimeError("PixAI tagger is not loaded. Call load_model_and_tags() first.")
+
+    thresholds = {
+        "general": PIXAI_GENERAL_THRESHOLD,
+        "character": PIXAI_CHARACTER_THRESHOLD,
+    }
+    general_tags, character_tags, ips = pixai_tagger(
+        image.convert("RGB"),
+        model_name=PIXAI_MODEL_NAME,
+        thresholds=thresholds,
+        fmt=("general", "character", "ips"),
+    )
+
+    details: List[TagDetail] = []
+    seen = set()
+
+    def append_detail(tag: str, category: str, score: Optional[float]) -> None:
+        normalized = _normalize_tag(tag)
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        details.append(
+            {
+                "tag": normalized,
+                "prompt_tag": normalized.replace(" ", "_"),
+                "translated": _translate_tag(normalized),
+                "category": category,
+                "score": float(score) if score is not None else None,
+            }
+        )
+
+    for tag, score in character_tags.items():
+        append_detail(tag, "character", score)
+    for tag, score in general_tags.items():
+        append_detail(tag, "general", score)
+    for tag in ips:
+        append_detail(tag, "copyright", None)
+
+    return details
+
+
 def _predict_wd(image: Image.Image) -> List[str]:
     if ort_session is None:
         raise RuntimeError("Legacy WD model is not loaded. Call load_model_and_tags() first.")
@@ -217,10 +272,39 @@ def _predict_wd(image: Image.Image) -> List[str]:
     return [_translate_tag(tag) for tag in predicted_tags]
 
 
+def _predict_wd_details(image: Image.Image) -> List[TagDetail]:
+    if ort_session is None:
+        raise RuntimeError("Legacy WD model is not loaded. Call load_model_and_tags() first.")
+
+    image_np = prepare_image(image.convert("RGB"), input_size)
+    input_name = ort_session.get_inputs()[0].name
+    output_name = ort_session.get_outputs()[0].name
+    ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
+    preds = 1 / (1 + np.exp(-ort_outs))
+    tag_preds = preds[0]
+    return [
+        {
+            "tag": tag,
+            "prompt_tag": tag.replace(" ", "_"),
+            "translated": _translate_tag(tag),
+            "category": "general",
+            "score": float(score),
+        }
+        for tag, score in zip(tags_list, tag_preds)
+        if score > WD_THRESHOLD
+    ]
+
+
 def predict(image: Image.Image) -> List[str]:
     if TAGGER_BACKEND == "pixai":
         return _predict_pixai(image)
     return _predict_wd(image)
+
+
+def predict_details(image: Image.Image) -> List[TagDetail]:
+    if TAGGER_BACKEND == "pixai":
+        return _predict_pixai_details(image)
+    return _predict_wd_details(image)
 
 
 def get_tagger_info() -> Dict[str, object]:
