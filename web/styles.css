@@ -233,15 +233,16 @@ textarea {
   color: #66501b;
 }
 
-.tag:hover {
+button.tag:hover:not(:disabled) {
   border-color: var(--accent-strong);
   background: var(--accent);
   color: white;
 }
 
-.tag:hover .tag-translated,
-.tag:hover small {
-  color: rgba(255, 255, 255, 0.82);
+button.tag:hover:not(:disabled) .tag-prompt,
+button.tag:hover:not(:disabled) .tag-translated,
+button.tag:hover:not(:disabled) small {
+  color: white;
 }
 
 .tag-prompt,
