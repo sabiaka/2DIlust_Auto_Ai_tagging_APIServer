@@ -34,6 +34,17 @@
               <input id="fileInput" type="file" accept="image/*" />
               <img id="preview" alt="選択した画像のプレビュー" hidden />
               <span id="dropText">画像を選択またはドロップ</span>
+              <div id="analyzeOverlay" class="analyze-overlay" hidden>
+                <div class="scan-frame">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="scan-copy">
+                  <strong>タグ特徴を解析中</strong>
+                  <small>線画、色、構図、キャラクター候補を照合しています</small>
+                </div>
+              </div>
             </label>
 
             <div class="actions">
@@ -64,7 +75,16 @@
               </div>
             </div>
             <div id="tagList" class="tag-list" aria-live="polite"></div>
+
           </div>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="panel-head compact">
+            <h2>過去の判定</h2>
+            <button id="reloadHistoryButton" type="button" class="ghost">更新</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
         </section>
       </section>
 

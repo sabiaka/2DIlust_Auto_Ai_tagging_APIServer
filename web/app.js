@@ -2,6 +2,7 @@ const fileInput = document.querySelector("#fileInput");
 const dropZone = document.querySelector("#dropZone");
 const preview = document.querySelector("#preview");
 const dropText = document.querySelector("#dropText");
+const analyzeOverlay = document.querySelector("#analyzeOverlay");
 const analyzeButton = document.querySelector("#analyzeButton");
 const clearButton = document.querySelector("#clearButton");
 const copyButton = document.querySelector("#copyButton");
@@ -18,11 +19,14 @@ const translationRows = document.querySelector("#translationRows");
 const translationSummary = document.querySelector("#translationSummary");
 const translationSaveStatus = document.querySelector("#translationSaveStatus");
 const reloadTranslationsButton = document.querySelector("#reloadTranslationsButton");
+const historyList = document.querySelector("#historyList");
+const reloadHistoryButton = document.querySelector("#reloadHistoryButton");
 
 let selectedFile = null;
 let previewUrl = null;
 let currentTags = [];
 let translationLoadTimer = null;
+let activeDetailHost = null;
 
 async function loadBackendInfo() {
   try {
@@ -39,6 +43,12 @@ async function loadBackendInfo() {
 function setStatus(message, isError = false) {
   statusText.textContent = message;
   statusText.classList.toggle("error", isError);
+}
+
+function setAnalyzing(isAnalyzing) {
+  analyzeOverlay.hidden = !isAnalyzing;
+  dropZone.classList.toggle("is-analyzing", isAnalyzing);
+  analyzeButton.disabled = isAnalyzing || !selectedFile;
 }
 
 function getPromptItems() {
@@ -79,6 +89,7 @@ function setFile(file) {
   tagList.replaceChildren();
   tagCount.textContent = "0件";
   copyButton.disabled = true;
+  activeDetailHost = null;
 
   if (previewUrl) {
     URL.revokeObjectURL(previewUrl);
@@ -98,6 +109,7 @@ function clearAll() {
   copyButton.disabled = true;
   promptOutput.value = "";
   currentTags = [];
+  activeDetailHost = null;
   tagList.replaceChildren();
   tagCount.textContent = "0件";
   preview.hidden = true;
@@ -113,6 +125,7 @@ function clearAll() {
 function renderTags(tags) {
   currentTags = tags;
   tagList.replaceChildren();
+  activeDetailHost = null;
   tagCount.textContent = `${tags.length}件`;
 
   if (!tags.length) {
@@ -125,6 +138,9 @@ function renderTags(tags) {
 
   const fragment = document.createDocumentFragment();
   for (const tag of tags) {
+    const card = document.createElement("article");
+    card.className = "tag-card";
+
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "tag";
@@ -166,9 +182,11 @@ function renderTags(tags) {
         ? current.filter((item) => item !== tag.prompt_tag)
         : [...current, tag.prompt_tag];
       setPromptItems(next);
+      showInlineDanbooru(card, tag.prompt_tag, tag.translated || tag.tag);
     });
 
-    fragment.append(chip);
+    card.append(chip);
+    fragment.append(card);
   }
   tagList.append(fragment);
   syncTagStates();
@@ -179,8 +197,8 @@ async function analyze() {
     return;
   }
 
-  analyzeButton.disabled = true;
   copyButton.disabled = true;
+  setAnalyzing(true);
   setStatus("解析中...");
 
   const formData = new FormData();
@@ -201,10 +219,11 @@ async function analyze() {
     renderTags(result.tags);
     copyButton.disabled = result.prompt.length === 0;
     setStatus(`${result.tags.length}件のタグを検出`);
+    loadHistory();
   } catch (error) {
     setStatus(`解析に失敗しました: ${error.message}`, true);
   } finally {
-    analyzeButton.disabled = !selectedFile;
+    setAnalyzing(false);
   }
 }
 
@@ -216,6 +235,10 @@ function activateView(viewId) {
     const isActive = view.id === viewId;
     view.classList.toggle("is-active", isActive);
     view.hidden = !isActive;
+  }
+  activeDetailHost = null;
+  for (const detail of document.querySelectorAll(".inline-detail")) {
+    detail.remove();
   }
   if (viewId === "translationView" && !translationRows.children.length) {
     loadTranslations();
@@ -230,6 +253,7 @@ function scheduleTranslationLoad() {
 async function loadTranslations() {
   const fileKey = translationFile.value;
   const query = translationSearch.value.trim();
+  activeDetailHost = null;
   translationRows.innerHTML = '<p class="empty-state">読み込み中...</p>';
   translationSummary.textContent = "読み込み中";
 
@@ -256,6 +280,7 @@ async function loadTranslations() {
 
 function renderTranslationRows(data) {
   translationRows.replaceChildren();
+  activeDetailHost = null;
   translationSummary.textContent = `${data.label}: ${data.rows.length} / ${data.total}件を表示`;
 
   if (!data.rows.length) {
@@ -270,6 +295,8 @@ function renderTranslationRows(data) {
   for (const row of data.rows) {
     const item = document.createElement("article");
     item.className = "translation-row";
+    item.tabIndex = 0;
+    item.dataset.tag = row.name;
 
     const name = document.createElement("div");
     name.className = "translation-name";
@@ -280,14 +307,35 @@ function renderTranslationRows(data) {
     input.value = row.japanese_name || "";
     input.placeholder = "日本語訳";
     input.autocomplete = "off";
+    input.addEventListener("click", (event) => event.stopPropagation());
 
     const save = document.createElement("button");
     save.type = "button";
     save.className = "save-row";
     save.textContent = "保存";
-    save.addEventListener("click", () => saveTranslation(data.key, row.index, input.value, save));
+    save.addEventListener("click", (event) => {
+      event.stopPropagation();
+      saveTranslation(data.key, row.index, input.value, save);
+    });
 
-    item.append(name, input, save);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "open-row ghost";
+    open.textContent = "詳細";
+    open.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showInlineDanbooru(item, row.name, input.value || row.japanese_name || row.name);
+    });
+
+    item.addEventListener("click", () => showInlineDanbooru(item, row.name, input.value || row.japanese_name || row.name));
+    item.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showInlineDanbooru(item, row.name, input.value || row.japanese_name || row.name);
+      }
+    });
+
+    item.append(name, input, save, open);
     fragment.append(item);
   }
   translationRows.append(fragment);
@@ -356,6 +404,164 @@ async function reloadTranslations() {
   }
 }
 
+async function showInlineDanbooru(host, tag, label = tag) {
+  const normalized = tag.trim().replaceAll(" ", "_");
+  if (!normalized) {
+    return;
+  }
+
+  if (activeDetailHost && activeDetailHost !== host) {
+    activeDetailHost.classList.remove("is-expanded");
+    activeDetailHost.querySelector(".inline-detail")?.remove();
+  }
+
+  const existing = host.querySelector(".inline-detail");
+  if (activeDetailHost === host && existing?.dataset.tag === normalized) {
+    host.classList.remove("is-expanded");
+    existing.remove();
+    activeDetailHost = null;
+    return;
+  }
+
+  existing?.remove();
+  activeDetailHost = host;
+  host.classList.add("is-expanded");
+
+  const detail = document.createElement("section");
+  detail.className = "inline-detail";
+  detail.dataset.tag = normalized;
+  detail.innerHTML = `
+    <div class="inline-detail-head">
+      <div>
+        <h3>${escapeHtml(normalized)}</h3>
+        <p>${escapeHtml(label && label !== normalized ? `${label} / 候補を取得中` : "候補を取得中")}</p>
+      </div>
+      <a class="link-button" href="https://danbooru.donmai.us/posts?tags=${encodeURIComponent(normalized)}" target="_blank" rel="noreferrer">検索結果を開く</a>
+    </div>
+    <div class="danbooru-images"><p class="empty-state">Danbooruから候補画像を取得中...</p></div>
+  `;
+  host.append(detail);
+
+  try {
+    const response = await fetch(`/danbooru/preview/${encodeURIComponent(normalized)}?limit=6`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    detail.querySelector(".link-button").href = data.search_url;
+    detail.querySelector("p").textContent = data.posts.length
+      ? `${data.posts.length}件の候補を表示`
+      : "候補画像が見つかりませんでした";
+    renderDanbooruImages(detail.querySelector(".danbooru-images"), data.posts);
+  } catch (error) {
+    detail.querySelector("p").textContent = "Danbooru候補を取得できませんでした";
+    detail.querySelector(".danbooru-images").innerHTML = `<p class="empty-state error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderDanbooruImages(container, posts) {
+  container.replaceChildren();
+  if (!posts.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "該当する画像がありません。検索結果ページを確認してください。";
+    container.append(empty);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const post of posts) {
+    const link = document.createElement("a");
+    link.className = "danbooru-thumb";
+    link.href = post.post_url;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+
+    const img = document.createElement("img");
+    img.src = post.preview_url;
+    img.alt = `Danbooru post ${post.id}`;
+    img.loading = "lazy";
+
+    const meta = document.createElement("span");
+    meta.textContent = `#${post.id}${post.rating ? ` / ${post.rating}` : ""}${post.score !== null && post.score !== undefined ? ` / score ${post.score}` : ""}`;
+
+    link.append(img, meta);
+    fragment.append(link);
+  }
+  container.append(fragment);
+}
+
+async function loadHistory() {
+  historyList.innerHTML = '<p class="empty-state">読み込み中...</p>';
+  try {
+    const response = await fetch("/history");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const items = await response.json();
+    renderHistory(items);
+  } catch (error) {
+    historyList.innerHTML = `<p class="empty-state error">履歴を読み込めませんでした: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderHistory(items) {
+  historyList.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "まだ判定履歴がありません。";
+    historyList.append(empty);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const item of items.slice(0, 12)) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "history-card";
+
+    const img = document.createElement("img");
+    img.src = item.image_url;
+    img.alt = item.filename;
+    img.loading = "lazy";
+
+    const body = document.createElement("span");
+    body.className = "history-body";
+
+    const name = document.createElement("strong");
+    name.textContent = item.filename || "判定画像";
+
+    const meta = document.createElement("small");
+    const created = item.created_at ? new Date(item.created_at).toLocaleString() : "";
+    meta.textContent = `${item.tags.length}件 / ${created}`;
+
+    body.append(name, meta);
+    card.append(img, body);
+    card.addEventListener("click", () => restoreHistoryItem(item));
+    fragment.append(card);
+  }
+  historyList.append(fragment);
+}
+
+function restoreHistoryItem(item) {
+  selectedFile = null;
+  fileInput.value = "";
+  if (previewUrl) {
+    URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+  }
+  preview.src = item.image_url;
+  preview.hidden = false;
+  dropText.hidden = true;
+  analyzeButton.disabled = true;
+  clearButton.disabled = false;
+  promptOutput.value = item.prompt || "";
+  renderTags(item.tags || []);
+  copyButton.disabled = promptOutput.value.trim().length === 0;
+  setStatus(`${item.filename} を復元`);
+}
+
 fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
 analyzeButton.addEventListener("click", analyze);
 clearButton.addEventListener("click", clearAll);
@@ -396,5 +602,7 @@ dropZone.addEventListener("drop", (event) => {
 translationFile.addEventListener("change", loadTranslations);
 translationSearch.addEventListener("input", scheduleTranslationLoad);
 reloadTranslationsButton.addEventListener("click", reloadTranslations);
+reloadHistoryButton.addEventListener("click", loadHistory);
 
 loadBackendInfo();
+loadHistory();
