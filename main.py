@@ -1,5 +1,6 @@
 # main.py
 
+import csv
 import io
 import cv2
 import numpy as np
@@ -20,7 +21,7 @@ from psd_tools import PSDImage
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
-from tagger import get_tagger_info, predict, predict_details, load_model_and_tags
+from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations
 
 logger = logging.getLogger("uvicorn")
 
@@ -32,6 +33,12 @@ app = FastAPI(
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
+MODELS_DATA_DIR = BASE_DIR / "models_data"
+TRANSLATION_FILES = {
+    "extra": MODELS_DATA_DIR / "tag_translations_extra.csv",
+    "pixai_general": MODELS_DATA_DIR / "pixai_missing_translations.csv",
+    "pixai_character": MODELS_DATA_DIR / "pixai_missing_character_translations.csv",
+}
 app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
 @app.on_event("startup")
@@ -54,6 +61,31 @@ class AnalyzeResponse(BaseModel):
     tags: List[TagDetailResponse]
     prompt: str
 
+class TranslationRow(BaseModel):
+    index: int
+    name: str
+    japanese_name: str
+    category: Optional[str] = None
+    count: Optional[str] = None
+
+class TranslationFileResponse(BaseModel):
+    key: str
+    label: str
+    rows: List[TranslationRow]
+    total: int
+
+class TranslationUpdate(BaseModel):
+    file_key: str
+    index: int
+    japanese_name: str
+
+class TranslationUpdateResponse(BaseModel):
+    ok: bool
+    row: TranslationRow
+
+class TranslationReloadResponse(BaseModel):
+    ok: bool
+
 @app.get("/", response_class=HTMLResponse)
 async def web_app():
     index_path = WEB_DIR / "index.html"
@@ -62,6 +94,103 @@ async def web_app():
 @app.get("/tagger-info")
 async def tagger_info():
     return get_tagger_info()
+
+def _translation_file_label(file_key: str) -> str:
+    labels = {
+        "extra": "追加翻訳",
+        "pixai_general": "PixAI一般タグ",
+        "pixai_character": "PixAIキャラクター",
+    }
+    return labels.get(file_key, file_key)
+
+def _get_translation_file(file_key: str) -> Path:
+    path = TRANSLATION_FILES.get(file_key)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Unknown translation file.")
+    return path
+
+def _read_translation_rows(file_key: str) -> tuple[List[str], List[List[str]], Path]:
+    path = _get_translation_file(file_key)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("name,japanese_name\n", encoding="utf-8")
+
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            header = ["name", "japanese_name"]
+            rows = []
+        else:
+            rows = list(reader)
+
+    if "name" not in header:
+        raise HTTPException(status_code=400, detail="CSV must include a name column.")
+    if "japanese_name" not in header:
+        header.append("japanese_name")
+        for row in rows:
+            row.append("")
+
+    return header, rows, path
+
+def _row_to_response(index: int, header: List[str], row: List[str]) -> TranslationRow:
+    values = {name: row[i] if i < len(row) else "" for i, name in enumerate(header)}
+    return TranslationRow(
+        index=index,
+        name=values.get("name", ""),
+        japanese_name=values.get("japanese_name", ""),
+        category=values.get("category"),
+        count=values.get("count"),
+    )
+
+@app.get("/translations/{file_key}", response_model=TranslationFileResponse)
+async def list_translations(file_key: str, q: str = "", limit: int = 250):
+    header, rows, _ = _read_translation_rows(file_key)
+    query = q.strip().lower()
+    limit = max(1, min(limit, 1000))
+
+    matched: List[TranslationRow] = []
+    for index, row in enumerate(rows):
+        response_row = _row_to_response(index, header, row)
+        haystack = f"{response_row.name} {response_row.japanese_name}".lower()
+        if query and query not in haystack:
+            continue
+        matched.append(response_row)
+        if len(matched) >= limit:
+            break
+
+    return TranslationFileResponse(
+        key=file_key,
+        label=_translation_file_label(file_key),
+        rows=matched,
+        total=len(rows),
+    )
+
+@app.post("/translations/update", response_model=TranslationUpdateResponse)
+async def update_translation(update: TranslationUpdate):
+    header, rows, path = _read_translation_rows(update.file_key)
+    if update.index < 0 or update.index >= len(rows):
+        raise HTTPException(status_code=404, detail="Translation row not found.")
+
+    japanese_name_index = header.index("japanese_name")
+    row = rows[update.index]
+    while len(row) < len(header):
+        row.append("")
+    row[japanese_name_index] = update.japanese_name.strip()
+
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+
+    reload_translations()
+    return TranslationUpdateResponse(ok=True, row=_row_to_response(update.index, header, row))
+
+@app.post("/translations/reload", response_model=TranslationReloadResponse)
+async def reload_translation_map():
+    reload_translations()
+    return TranslationReloadResponse(ok=True)
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_image(file: UploadFile = File(...)):

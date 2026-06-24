@@ -68,6 +68,10 @@ def _load_translation_map() -> None:
             _load_translation_csv(path, append_to_tags_list=False)
 
 
+def reload_translations() -> None:
+    _load_translation_map()
+
+
 def _load_translation_csv(path: Path, append_to_tags_list: bool) -> None:
     with open(path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)

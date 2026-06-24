@@ -8,42 +8,96 @@
   </head>
   <body>
     <main class="shell">
-      <section class="workspace">
-        <div class="panel upload-panel">
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Image Prompt Lab</p>
-              <h1>一枚絵タグ判定</h1>
-            </div>
-            <span id="backendBadge" class="badge">loading</span>
-          </div>
-
-          <label id="dropZone" class="drop-zone" for="fileInput">
-            <input id="fileInput" type="file" accept="image/*" />
-            <img id="preview" alt="" hidden />
-            <span id="dropText">画像を選択</span>
-          </label>
-
-          <div class="actions">
-            <button id="analyzeButton" type="button" disabled>判定</button>
-            <button id="clearButton" type="button" class="ghost" disabled>クリア</button>
-          </div>
-
-          <p id="status" class="status">待機中</p>
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Image Prompt Lab</p>
+          <h1>タグ確認と翻訳CSV編集</h1>
         </div>
+        <span id="backendBadge" class="status-badge">接続確認中</span>
+      </header>
 
-        <div class="panel result-panel">
-          <div class="panel-head compact">
-            <h2>Prompt</h2>
-            <button id="copyButton" type="button" class="ghost" disabled>コピー</button>
-          </div>
-          <textarea id="promptOutput" spellcheck="false" placeholder="判定後にプロンプト候補が入ります"></textarea>
+      <nav class="tabs" aria-label="作業画面">
+        <button id="promptTab" class="tab is-active" type="button" data-view="promptView">プロンプト</button>
+        <button id="translationTab" class="tab" type="button" data-view="translationView">CSV翻訳</button>
+      </nav>
 
-          <div class="panel-head compact tag-head">
-            <h2>Tags</h2>
-            <span id="tagCount" class="count">0</span>
+      <section id="promptView" class="view is-active">
+        <section class="workspace">
+          <div class="panel upload-panel">
+            <div class="panel-head">
+              <div>
+                <h2>画像を解析</h2>
+              </div>
+            </div>
+
+            <label id="dropZone" class="drop-zone" for="fileInput">
+              <input id="fileInput" type="file" accept="image/*" />
+              <img id="preview" alt="選択した画像のプレビュー" hidden />
+              <span id="dropText">画像を選択またはドロップ</span>
+            </label>
+
+            <div class="actions">
+              <button id="analyzeButton" type="button" disabled>解析する</button>
+              <button id="clearButton" type="button" class="ghost" disabled>クリア</button>
+            </div>
+
+            <p id="status" class="status-text">待機中</p>
           </div>
-          <div id="tagList" class="tag-list"></div>
+
+          <div class="panel result-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>プロンプト</h2>
+              </div>
+              <button id="copyButton" type="button" class="ghost" disabled>コピー</button>
+            </div>
+            <textarea id="promptOutput" spellcheck="false" placeholder="解析後にプロンプトが入ります"></textarea>
+
+            <div class="tag-toolbar">
+              <div>
+                <h2>タグ</h2>
+                <span id="tagCount" class="count">0件</span>
+              </div>
+              <div class="tag-legend" aria-label="タグ状態の凡例">
+                <span>有効</span>
+                <span>無効</span>
+              </div>
+            </div>
+            <div id="tagList" class="tag-list" aria-live="polite"></div>
+          </div>
+        </section>
+      </section>
+
+      <section id="translationView" class="view" hidden>
+        <div class="panel translation-panel">
+          <div class="translation-top">
+            <div>
+              <h2>翻訳CSVの対応を直す</h2>
+            </div>
+            <button id="reloadTranslationsButton" type="button" class="ghost">再読込</button>
+          </div>
+
+          <div class="translation-controls">
+            <label>
+              CSV
+              <select id="translationFile">
+                <option value="pixai_general">PixAI一般タグ</option>
+                <option value="pixai_character">PixAIキャラクター</option>
+                <option value="extra">追加翻訳</option>
+              </select>
+            </label>
+            <label>
+              検索
+              <input id="translationSearch" type="search" placeholder="tag または 日本語訳" />
+            </label>
+          </div>
+
+          <div class="translation-summary">
+            <span id="translationSummary">読み込み前</span>
+            <span id="translationSaveStatus">変更はここに表示されます</span>
+          </div>
+
+          <div id="translationRows" class="translation-rows"></div>
         </div>
       </section>
     </main>
