@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Prompt Lab</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <div class="panel upload-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Image Prompt Lab</p>
+              <h1>一枚絵タグ判定</h1>
+            </div>
+            <span id="backendBadge" class="badge">loading</span>
+          </div>
+
+          <label id="dropZone" class="drop-zone" for="fileInput">
+            <input id="fileInput" type="file" accept="image/*" />
+            <img id="preview" alt="" hidden />
+            <span id="dropText">画像を選択</span>
+          </label>
+
+          <div class="actions">
+            <button id="analyzeButton" type="button" disabled>判定</button>
+            <button id="clearButton" type="button" class="ghost" disabled>クリア</button>
+          </div>
+
+          <p id="status" class="status">待機中</p>
+        </div>
+
+        <div class="panel result-panel">
+          <div class="panel-head compact">
+            <h2>Prompt</h2>
+            <button id="copyButton" type="button" class="ghost" disabled>コピー</button>
+          </div>
+          <textarea id="promptOutput" spellcheck="false" placeholder="判定後にプロンプト候補が入ります"></textarea>
+
+          <div class="panel-head compact tag-head">
+            <h2>Tags</h2>
+            <span id="tagCount" class="count">0</span>
+          </div>
+          <div id="tagList" class="tag-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

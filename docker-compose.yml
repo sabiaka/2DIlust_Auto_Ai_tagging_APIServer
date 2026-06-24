@@ -19,7 +19,7 @@ services:
     # コンテナがちゃんと生きてるかチェックする機能を追加
     healthcheck:
       # 30秒ごとに「curl http://localhost:8000」を試して！
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000', timeout=5).read()"]
       interval: 30s    # チェックの間隔
       timeout: 10s     # タイムアウトまでの時間
       retries: 3       # 失敗した場合に3回までリトライ

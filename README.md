@@ -45,6 +45,7 @@ PixAI Taggerを使う場合、旧WDモデルの `model.safetensors` は不要で
 3. 起動後、APIにアクセスします。
 
    - API: http://localhost:8000
+   - Web UI: http://localhost:8000
    - Tagger情報: http://localhost:8000/tagger-info
 
 4. 動作確認します。
@@ -114,6 +115,31 @@ environment:
 ### `GET /tagger-info`
 
 現在のタグ付けバックエンドとしきい値を返します。
+
+### `GET /`
+
+一枚の画像からStable Diffusion向けのプロンプト候補を作るWeb UIを開きます。
+
+### `POST /analyze`
+
+画像ファイルをアップロードして、英語タグ・日本語表示名・カテゴリ・スコア・プロンプト文字列を返します。
+
+レスポンス例:
+
+```json
+{
+  "tags": [
+    {
+      "tag": "long hair",
+      "prompt_tag": "long_hair",
+      "translated": "ロングヘア",
+      "category": "general",
+      "score": 0.91
+    }
+  ],
+  "prompt": "long_hair"
+}
+```
 
 ### `POST /tag`
 

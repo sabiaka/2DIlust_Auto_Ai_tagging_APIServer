@@ -6,9 +6,12 @@ import numpy as np
 import math
 import collections # タグの回数を数えるのに便利なライブラリ
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
-from typing import List, Dict
+from pathlib import Path
+from typing import List, Dict, Optional
 import logging
 import traceback
 from psd_tools import PSDImage
@@ -17,7 +20,7 @@ from psd_tools import PSDImage
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
-from tagger import get_tagger_info, predict, load_model_and_tags
+from tagger import get_tagger_info, predict, predict_details, load_model_and_tags
 
 logger = logging.getLogger("uvicorn")
 
@@ -26,6 +29,10 @@ app = FastAPI(
     description="シーン分析でノイズを除去し、最強の一つのタグリストを返すAPIサーバー✨",
     version="2.2.0", # さらに進化した！
 )
+
+BASE_DIR = Path(__file__).resolve().parent
+WEB_DIR = BASE_DIR / "web"
+app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
 @app.on_event("startup")
 async def startup_event():
@@ -36,9 +43,41 @@ async def startup_event():
 class TagResponse(BaseModel):
     tags: List[str]
 
+class TagDetailResponse(BaseModel):
+    tag: str
+    prompt_tag: str
+    translated: str
+    category: str
+    score: Optional[float] = None
+
+class AnalyzeResponse(BaseModel):
+    tags: List[TagDetailResponse]
+    prompt: str
+
+@app.get("/", response_class=HTMLResponse)
+async def web_app():
+    index_path = WEB_DIR / "index.html"
+    return HTMLResponse(index_path.read_text(encoding="utf-8"))
+
 @app.get("/tagger-info")
 async def tagger_info():
     return get_tagger_info()
+
+@app.post("/analyze", response_model=AnalyzeResponse)
+async def analyze_image(file: UploadFile = File(...)):
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Image files only.")
+
+    try:
+        file_bytes = await file.read()
+        image = Image.open(io.BytesIO(file_bytes))
+        details = predict_details(image)
+        prompt = ", ".join(detail["prompt_tag"] for detail in details)
+        return AnalyzeResponse(tags=details, prompt=prompt)
+    except Exception as e:
+        logger.error(f"Analyze error: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to analyze image.")
 
 @app.post("/tag", response_model=TagResponse)
 async def create_tags(file: UploadFile = File(...)):
