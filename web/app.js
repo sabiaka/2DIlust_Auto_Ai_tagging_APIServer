@@ -21,12 +21,30 @@ const translationSaveStatus = document.querySelector("#translationSaveStatus");
 const reloadTranslationsButton = document.querySelector("#reloadTranslationsButton");
 const historyList = document.querySelector("#historyList");
 const reloadHistoryButton = document.querySelector("#reloadHistoryButton");
+const imageModal = document.querySelector("#imageModal");
+const closeImageModal = document.querySelector("#closeImageModal");
+const imageStage = document.querySelector("#imageStage");
+const modalImage = document.querySelector("#modalImage");
+const zoomOutButton = document.querySelector("#zoomOutButton");
+const zoomInButton = document.querySelector("#zoomInButton");
+const resetZoomButton = document.querySelector("#resetZoomButton");
+const zoomSlider = document.querySelector("#zoomSlider");
 
 let selectedFile = null;
 let previewUrl = null;
 let currentTags = [];
 let translationLoadTimer = null;
 let activeDetailHost = null;
+let imageViewer = {
+  scale: 1,
+  x: 0,
+  y: 0,
+  dragging: false,
+  startX: 0,
+  startY: 0,
+  originX: 0,
+  originY: 0,
+};
 
 async function loadBackendInfo() {
   try {
@@ -95,6 +113,7 @@ function setFile(file) {
     URL.revokeObjectURL(previewUrl);
   }
   previewUrl = URL.createObjectURL(file);
+  preview.onload = () => updatePreviewAspect(preview.naturalWidth, preview.naturalHeight);
   preview.src = previewUrl;
   preview.hidden = false;
   dropText.hidden = true;
@@ -114,12 +133,22 @@ function clearAll() {
   tagCount.textContent = "0件";
   preview.hidden = true;
   preview.removeAttribute("src");
+  dropZone.style.removeProperty("--preview-aspect");
   dropText.hidden = false;
   if (previewUrl) {
     URL.revokeObjectURL(previewUrl);
     previewUrl = null;
   }
   setStatus("待機中");
+}
+
+function updatePreviewAspect(width, height) {
+  if (!width || !height) {
+    dropZone.style.removeProperty("--preview-aspect");
+    return;
+  }
+  const aspect = Math.max(0.35, Math.min(2.4, width / height));
+  dropZone.style.setProperty("--preview-aspect", String(aspect));
 }
 
 function renderTags(tags) {
@@ -141,9 +170,10 @@ function renderTags(tags) {
     const card = document.createElement("article");
     card.className = "tag-card";
 
-    const chip = document.createElement("button");
-    chip.type = "button";
+    const chip = document.createElement("div");
     chip.className = "tag";
+    chip.role = "button";
+    chip.tabIndex = 0;
     chip.dataset.category = tag.category;
     chip.dataset.promptTag = tag.prompt_tag;
 
@@ -176,15 +206,32 @@ function renderTags(tags) {
     }
 
     chip.append(body, meta);
-    chip.addEventListener("click", () => {
+    const toggleTag = () => {
       const current = getPromptItems();
       const next = current.includes(tag.prompt_tag)
         ? current.filter((item) => item !== tag.prompt_tag)
         : [...current, tag.prompt_tag];
       setPromptItems(next);
+    };
+    chip.addEventListener("click", toggleTag);
+    chip.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleTag();
+      }
+    });
+
+    const detailButton = document.createElement("button");
+    detailButton.type = "button";
+    detailButton.className = "tag-detail-button";
+    detailButton.textContent = "詳細";
+    detailButton.title = "Danbooru候補を表示";
+    detailButton.addEventListener("click", (event) => {
+      event.stopPropagation();
       showInlineDanbooru(card, tag.prompt_tag, tag.translated || tag.tag);
     });
 
+    meta.append(detailButton);
     card.append(chip);
     fragment.append(card);
   }
@@ -551,6 +598,7 @@ function restoreHistoryItem(item) {
     URL.revokeObjectURL(previewUrl);
     previewUrl = null;
   }
+  preview.onload = () => updatePreviewAspect(preview.naturalWidth, preview.naturalHeight);
   preview.src = item.image_url;
   preview.hidden = false;
   dropText.hidden = true;
@@ -562,9 +610,85 @@ function restoreHistoryItem(item) {
   setStatus(`${item.filename} を復元`);
 }
 
+function hasPreviewImage() {
+  return !preview.hidden && Boolean(preview.getAttribute("src"));
+}
+
+function openFilePicker() {
+  fileInput.click();
+}
+
+function openImageModal() {
+  if (!hasPreviewImage()) {
+    openFilePicker();
+    return;
+  }
+  modalImage.src = preview.src;
+  imageModal.hidden = false;
+  document.body.classList.add("modal-open");
+  resetImageViewer();
+}
+
+function closeViewer() {
+  imageModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  imageViewer.dragging = false;
+}
+
+function resetImageViewer() {
+  imageViewer.scale = 1;
+  imageViewer.x = 0;
+  imageViewer.y = 0;
+  zoomSlider.value = "1";
+  applyImageTransform();
+}
+
+function setZoom(nextScale, anchorX = 0, anchorY = 0) {
+  const previous = imageViewer.scale;
+  const scale = Math.max(1, Math.min(5, nextScale));
+  if (scale === previous) {
+    return;
+  }
+  const ratio = scale / previous;
+  imageViewer.x = anchorX - (anchorX - imageViewer.x) * ratio;
+  imageViewer.y = anchorY - (anchorY - imageViewer.y) * ratio;
+  if (scale === 1) {
+    imageViewer.x = 0;
+    imageViewer.y = 0;
+  }
+  imageViewer.scale = scale;
+  zoomSlider.value = String(scale);
+  applyImageTransform();
+}
+
+function applyImageTransform() {
+  modalImage.style.transform = `translate3d(${imageViewer.x}px, ${imageViewer.y}px, 0) scale(${imageViewer.scale})`;
+  imageStage.classList.toggle("is-zoomed", imageViewer.scale > 1);
+}
+
 fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
 analyzeButton.addEventListener("click", analyze);
 clearButton.addEventListener("click", clearAll);
+dropZone.addEventListener("click", (event) => {
+  if (event.target === fileInput) {
+    return;
+  }
+  if (hasPreviewImage()) {
+    openImageModal();
+  } else {
+    openFilePicker();
+  }
+});
+dropZone.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    if (hasPreviewImage()) {
+      openImageModal();
+    } else {
+      openFilePicker();
+    }
+  }
+});
 promptOutput.addEventListener("input", () => {
   copyButton.disabled = promptOutput.value.trim().length === 0;
   if (currentTags.length) {
@@ -598,6 +722,59 @@ for (const eventName of ["dragleave", "drop"]) {
 dropZone.addEventListener("drop", (event) => {
   setFile(event.dataTransfer.files[0]);
 });
+
+closeImageModal.addEventListener("click", closeViewer);
+imageModal.addEventListener("click", (event) => {
+  if (event.target.classList.contains("image-modal-backdrop")) {
+    closeViewer();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !imageModal.hidden) {
+    closeViewer();
+  }
+});
+imageStage.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const rect = imageStage.getBoundingClientRect();
+  const anchorX = event.clientX - rect.left - rect.width / 2;
+  const anchorY = event.clientY - rect.top - rect.height / 2;
+  const delta = event.deltaY < 0 ? 0.18 : -0.18;
+  setZoom(imageViewer.scale + delta, anchorX, anchorY);
+}, { passive: false });
+imageStage.addEventListener("pointerdown", (event) => {
+  if (imageViewer.scale <= 1) {
+    return;
+  }
+  imageViewer.dragging = true;
+  imageViewer.startX = event.clientX;
+  imageViewer.startY = event.clientY;
+  imageViewer.originX = imageViewer.x;
+  imageViewer.originY = imageViewer.y;
+  imageStage.setPointerCapture(event.pointerId);
+});
+imageStage.addEventListener("pointermove", (event) => {
+  if (!imageViewer.dragging) {
+    return;
+  }
+  imageViewer.x = imageViewer.originX + event.clientX - imageViewer.startX;
+  imageViewer.y = imageViewer.originY + event.clientY - imageViewer.startY;
+  applyImageTransform();
+});
+imageStage.addEventListener("pointerup", () => {
+  imageViewer.dragging = false;
+});
+imageStage.addEventListener("dblclick", () => {
+  if (imageViewer.scale > 1) {
+    resetImageViewer();
+  } else {
+    setZoom(2.4);
+  }
+});
+zoomOutButton.addEventListener("click", () => setZoom(imageViewer.scale - 0.3));
+zoomInButton.addEventListener("click", () => setZoom(imageViewer.scale + 0.3));
+resetZoomButton.addEventListener("click", resetImageViewer);
+zoomSlider.addEventListener("input", () => setZoom(Number(zoomSlider.value)));
 
 translationFile.addEventListener("change", loadTranslations);
 translationSearch.addEventListener("input", scheduleTranslationLoad);

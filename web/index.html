@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Image Prompt Lab</title>
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260624-aspect-viewer" />
   </head>
   <body>
     <main class="shell">
@@ -30,7 +30,7 @@
               </div>
             </div>
 
-            <label id="dropZone" class="drop-zone" for="fileInput">
+            <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="画像を選択または表示">
               <input id="fileInput" type="file" accept="image/*" />
               <img id="preview" alt="選択した画像のプレビュー" hidden />
               <span id="dropText">画像を選択またはドロップ</span>
@@ -45,7 +45,7 @@
                   <small>線画、色、構図、キャラクター候補を照合しています</small>
                 </div>
               </div>
-            </label>
+            </div>
 
             <div class="actions">
               <button id="analyzeButton" type="button" disabled>解析する</button>
@@ -122,6 +122,22 @@
       </section>
     </main>
 
-    <script src="/assets/app.js"></script>
+    <div id="imageModal" class="image-modal" hidden>
+      <div class="image-modal-backdrop"></div>
+      <div class="image-modal-surface" role="dialog" aria-modal="true" aria-label="画像ビューア">
+        <button id="closeImageModal" class="modal-icon-button" type="button" aria-label="閉じる">×</button>
+        <div id="imageStage" class="image-stage">
+          <img id="modalImage" alt="拡大表示" draggable="false" />
+        </div>
+        <div class="modal-toolbar">
+          <button id="zoomOutButton" type="button" class="ghost">縮小</button>
+          <input id="zoomSlider" type="range" min="1" max="5" step="0.05" value="1" aria-label="ズーム" />
+          <button id="zoomInButton" type="button" class="ghost">拡大</button>
+          <button id="resetZoomButton" type="button" class="ghost">リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/assets/app.js?v=20260624-aspect-viewer"></script>
   </body>
 </html>

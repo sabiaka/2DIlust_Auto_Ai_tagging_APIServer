@@ -30,6 +30,10 @@ body {
     var(--bg);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -175,8 +179,9 @@ h2 {
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 1 / 1;
-  min-height: 300px;
+  aspect-ratio: var(--preview-aspect, 1 / 1);
+  min-height: 260px;
+  max-height: min(72vh, 760px);
   overflow: hidden;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
@@ -206,6 +211,7 @@ h2 {
   height: 100%;
   object-fit: contain;
   background: #161c1b;
+  cursor: zoom-in;
 }
 
 #dropText {
@@ -507,6 +513,8 @@ select:focus {
 
 .tag-card {
   display: grid;
+  gap: 8px;
+  align-items: stretch;
   border: 1px solid transparent;
   border-radius: var(--radius);
 }
@@ -520,6 +528,10 @@ select:focus {
 
 .tag-card.is-expanded .tag {
   border-color: #b8d8d1;
+}
+
+.tag-card .inline-detail {
+  grid-column: 1 / -1;
 }
 
 .tag {
@@ -616,6 +628,115 @@ select:focus {
 .tag.is-active .tag-state {
   color: white;
   background: var(--accent);
+}
+
+.tag-detail-button {
+  justify-self: end;
+  min-height: 26px;
+  border-color: var(--line-strong);
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--panel-strong);
+}
+
+.tag-detail-button:hover:not(:disabled) {
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.image-modal[hidden] {
+  display: none;
+}
+
+.image-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 18, 17, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.image-modal-surface {
+  position: absolute;
+  inset: 22px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.modal-icon-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 42px;
+  min-height: 42px;
+  border-color: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 0;
+  color: white;
+  font-size: 24px;
+  line-height: 1;
+  background: rgba(20, 32, 30, 0.68);
+}
+
+.image-stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius);
+  background: rgba(9, 14, 13, 0.7);
+  cursor: zoom-in;
+  touch-action: none;
+}
+
+.image-stage.is-zoomed {
+  cursor: grab;
+}
+
+.image-stage.is-zoomed:active {
+  cursor: grabbing;
+}
+
+#modalImage {
+  max-width: min(100%, 1600px);
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  will-change: transform;
+  transition: transform 90ms ease-out;
+}
+
+.modal-toolbar {
+  justify-self: center;
+  display: grid;
+  grid-template-columns: auto minmax(160px, 260px) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: rgba(251, 252, 251, 0.92);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.modal-toolbar input[type="range"] {
+  width: 100%;
+  min-height: 34px;
+  padding: 0;
+  accent-color: var(--accent);
+  background: transparent;
 }
 
 .translation-panel {
@@ -815,7 +936,8 @@ input {
   }
 
   .drop-zone {
-    min-height: 240px;
+    min-height: 220px;
+    max-height: 62vh;
   }
 
   .result-panel,
@@ -834,5 +956,14 @@ input {
 
   #translationSearch {
     width: 100%;
+  }
+
+  .image-modal-surface {
+    inset: 10px;
+  }
+
+  .modal-toolbar {
+    width: 100%;
+    grid-template-columns: 1fr;
   }
 }
