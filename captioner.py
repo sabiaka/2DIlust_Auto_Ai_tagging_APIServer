@@ -3,20 +3,20 @@ import logging
 import os
 import re
 import threading
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, TypedDict
 
 from PIL import Image
 
 logger = logging.getLogger("uvicorn")
 
 QWEN_VL_MODEL_NAME = os.getenv("QWEN_VL_MODEL_NAME", "Qwen/Qwen2.5-VL-7B-Instruct")
-QWEN_VL_MAX_NEW_TOKENS = int(os.getenv("QWEN_VL_MAX_NEW_TOKENS", "256"))
-QWEN_VL_TEMPERATURE = float(os.getenv("QWEN_VL_TEMPERATURE", "0.2"))
+QWEN_VL_MAX_NEW_TOKENS = int(os.getenv("QWEN_VL_MAX_NEW_TOKENS", "384"))
+QWEN_VL_TEMPERATURE = float(os.getenv("QWEN_VL_TEMPERATURE", "0.15"))
 QWEN_VL_DEVICE_MAP = os.getenv("QWEN_VL_DEVICE_MAP", "auto").strip()
 QWEN_VL_LOAD_IN_4BIT = os.getenv("QWEN_VL_LOAD_IN_4BIT", "1").strip().lower() not in {"0", "false", "no"}
-QWEN_VL_MAX_PIXELS = int(os.getenv("QWEN_VL_MAX_PIXELS", str(512 * 28 * 28)))
+QWEN_VL_MAX_PIXELS = int(os.getenv("QWEN_VL_MAX_PIXELS", str(768 * 28 * 28)))
 QWEN_VL_MIN_PIXELS = int(os.getenv("QWEN_VL_MIN_PIXELS", str(128 * 28 * 28)))
-QWEN_VL_MAX_IMAGE_SIDE = int(os.getenv("QWEN_VL_MAX_IMAGE_SIDE", "768"))
+QWEN_VL_MAX_IMAGE_SIDE = int(os.getenv("QWEN_VL_MAX_IMAGE_SIDE", "1024"))
 
 _caption_lock = threading.Lock()
 _caption_model = None
@@ -82,21 +82,45 @@ def _device_for_inputs():
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def _clean_json_text(text: str) -> str:
+def _extract_first_json_object(text: str) -> str:
     text = text.strip()
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
     if fenced:
         text = fenced.group(1).strip()
+
     start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and start < end:
-        return text[start : end + 1]
-    return text
+    if start == -1:
+        return text
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+
+    return text[start:]
 
 
 def _parse_description(text: str) -> ImageDescription:
     try:
-        data = json.loads(_clean_json_text(text))
+        data = json.loads(_extract_first_json_object(text))
     except json.JSONDecodeError:
         return {
             "description": text.strip(),
@@ -146,23 +170,29 @@ def _is_cuda_oom(exc: BaseException) -> bool:
     return isinstance(exc, torch.OutOfMemoryError) or "out of memory" in str(exc).lower()
 
 
+def _description_prompt(tag_hints: List[str]) -> str:
+    instruction = (
+        "\u5fc5\u305a\u65e5\u672c\u8a9e\u3060\u3051\u3067\u56de\u7b54\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u82f1\u8a9e\u306f\u7981\u6b62\u3067\u3059\u3002"
+        "\u753b\u50cf\u3092\u76f4\u63a5\u89b3\u5bdf\u3057\u3001\u30bf\u30b0\u306e\u7f85\u5217\u3067\u306f\u306a\u304f\u81ea\u7136\u306a\u6587\u7ae0\u3067\u8aac\u660e\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
+        "\u8868\u60c5\u3001\u8996\u7dda\u3001\u53e3\u5143\u3001\u7709\u3001\u59ff\u52e2\u3001\u5834\u9762\u3001\u69cb\u56f3\u3001\u7a7a\u6c17\u611f\u3092\u3001\u898b\u3048\u3066\u3044\u308b\u7bc4\u56f2\u3060\u3051\u306b\u57fa\u3065\u3044\u3066\u5177\u4f53\u7684\u306b\u66f8\u3044\u3066\u304f\u3060\u3055\u3044\u3002"
+        "\u8fd4\u7b54\u306fJSON\u30aa\u30d6\u30b8\u30a7\u30af\u30c81\u3064\u3060\u3051\u306b\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u30ad\u30fc\u306f description, expression, situation \u306e3\u3064\u3060\u3051\u3067\u3059\u3002"
+        "\u5404\u5024\u306b\u306f\u3001\u3053\u306e\u753b\u50cf\u305d\u306e\u3082\u306e\u306b\u3064\u3044\u3066\u306e\u5177\u4f53\u7684\u306a\u65e5\u672c\u8a9e\u6587\u3092\u5165\u308c\u3066\u304f\u3060\u3055\u3044\u3002"
+        "\u8aac\u660e\u7528\u306e\u30d7\u30ec\u30fc\u30b9\u30db\u30eb\u30c0\u30fc\u3084\u30b9\u30ad\u30fc\u30de\u8aac\u660e\u3092\u5024\u306b\u5165\u308c\u3066\u306f\u3044\u3051\u307e\u305b\u3093\u3002"
+    )
+    hint_text = ", ".join(tag_hints[:80])
+    if hint_text:
+        instruction += (
+            "\n\u53c2\u8003\u30bf\u30b0\uff08\u88dc\u52a9\u60c5\u5831\u3067\u3059\u3002\u753b\u50cf\u306e\u76f4\u63a5\u89b3\u5bdf\u3092\u512a\u5148\u3057\u3066\u304f\u3060\u3055\u3044\uff09: "
+            f"{hint_text}"
+        )
+    return instruction
+
+
 def describe_image(image: Image.Image, tag_hints: List[str]) -> ImageDescription:
     _load_captioner()
 
     if _caption_model is None or _caption_processor is None:
         raise RuntimeError("Qwen2.5-VL captioner failed to load.")
-
-    hint_text = ", ".join(tag_hints[:80])
-    instruction = (
-        "必ず日本語だけで回答してください。英語は禁止です。"
-        "画像を直接観察し、タグの羅列ではなく自然な文章で説明してください。"
-        "表情、視線、口元、眉、姿勢、場面、構図、空気感を、見えている範囲だけに基づいて具体的に書いてください。"
-        "返答はJSONオブジェクト1つだけにしてください。キーは description, expression, situation の3つだけです。"
-        "各値には、この画像そのものについての具体的な日本語文を入れてください。"
-        "説明用のプレースホルダーやスキーマ説明を値に入れてはいけません。"
-    )
-    if hint_text:
-        instruction += f"\n参考タグ（補助情報です。画像の直接観察を優先してください）: {hint_text}"
 
     rgb_image = _resize_for_captioner(image)
     messages = [
@@ -170,7 +200,7 @@ def describe_image(image: Image.Image, tag_hints: List[str]) -> ImageDescription
             "role": "user",
             "content": [
                 {"type": "image", "image": rgb_image},
-                {"type": "text", "text": instruction},
+                {"type": "text", "text": _description_prompt(tag_hints)},
             ],
         }
     ]
