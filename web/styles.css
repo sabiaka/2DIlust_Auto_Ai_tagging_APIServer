@@ -206,6 +206,17 @@ h2 {
   opacity: 0;
 }
 
+.drop-zone > input[type="file"] {
+  pointer-events: none;
+}
+
+.drop-zone .url-import input {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  opacity: 1;
+}
+
 #preview {
   width: 100%;
   height: 100%;
@@ -217,6 +228,34 @@ h2 {
 #dropText {
   color: var(--muted);
   font-weight: 800;
+}
+
+.url-import {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(151, 170, 164, 0.44);
+  border-radius: var(--radius);
+  background: rgba(247, 249, 248, 0.9);
+  box-shadow: 0 12px 28px rgba(28, 39, 35, 0.12);
+  cursor: default;
+}
+
+.url-import input {
+  min-width: 0;
+  border-color: rgba(151, 170, 164, 0.7);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.url-import button {
+  min-height: 36px;
+  padding-inline: 13px;
 }
 
 .analyze-overlay {
@@ -705,6 +744,7 @@ select:focus {
   cursor: grab;
 }
 
+.image-stage.is-dragging,
 .image-stage.is-zoomed:active {
   cursor: grabbing;
 }

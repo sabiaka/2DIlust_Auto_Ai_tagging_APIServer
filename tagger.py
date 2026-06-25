@@ -1,6 +1,8 @@
 import csv
 import logging
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, TypedDict
 
@@ -31,6 +33,8 @@ tags_list: List[str] = []
 translation_map: Dict[str, str] = {}
 input_size: int = 448
 pixai_tagger = None
+_predict_lock = threading.Lock()
+_warmup_done = False
 
 
 class TagDetail(TypedDict, total=False):
@@ -193,12 +197,13 @@ def _predict_pixai(image: Image.Image) -> List[str]:
         "general": PIXAI_GENERAL_THRESHOLD,
         "character": PIXAI_CHARACTER_THRESHOLD,
     }
-    general_tags, character_tags, ips = pixai_tagger(
-        image.convert("RGB"),
-        model_name=PIXAI_MODEL_NAME,
-        thresholds=thresholds,
-        fmt=("general", "character", "ips"),
-    )
+    with _predict_lock:
+        general_tags, character_tags, ips = pixai_tagger(
+            image.convert("RGB"),
+            model_name=PIXAI_MODEL_NAME,
+            thresholds=thresholds,
+            fmt=("general", "character", "ips"),
+        )
 
     ordered_tags: List[str] = []
     for tag_group in (character_tags, general_tags):
@@ -223,12 +228,13 @@ def _predict_pixai_details(image: Image.Image) -> List[TagDetail]:
         "general": PIXAI_GENERAL_THRESHOLD,
         "character": PIXAI_CHARACTER_THRESHOLD,
     }
-    general_tags, character_tags, ips = pixai_tagger(
-        image.convert("RGB"),
-        model_name=PIXAI_MODEL_NAME,
-        thresholds=thresholds,
-        fmt=("general", "character", "ips"),
-    )
+    with _predict_lock:
+        general_tags, character_tags, ips = pixai_tagger(
+            image.convert("RGB"),
+            model_name=PIXAI_MODEL_NAME,
+            thresholds=thresholds,
+            fmt=("general", "character", "ips"),
+        )
 
     details: List[TagDetail] = []
     seen = set()
@@ -265,7 +271,8 @@ def _predict_wd(image: Image.Image) -> List[str]:
     image_np = prepare_image(image.convert("RGB"), input_size)
     input_name = ort_session.get_inputs()[0].name
     output_name = ort_session.get_outputs()[0].name
-    ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
+    with _predict_lock:
+        ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
     preds = 1 / (1 + np.exp(-ort_outs))
     tag_preds = preds[0]
     predicted_tags = [tag for tag, score in zip(tags_list, tag_preds) if score > WD_THRESHOLD]
@@ -279,7 +286,8 @@ def _predict_wd_details(image: Image.Image) -> List[TagDetail]:
     image_np = prepare_image(image.convert("RGB"), input_size)
     input_name = ort_session.get_inputs()[0].name
     output_name = ort_session.get_outputs()[0].name
-    ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
+    with _predict_lock:
+        ort_outs = ort_session.run([output_name], {input_name: image_np})[0]
     preds = 1 / (1 + np.exp(-ort_outs))
     tag_preds = preds[0]
     return [
@@ -305,6 +313,20 @@ def predict_details(image: Image.Image) -> List[TagDetail]:
     if TAGGER_BACKEND == "pixai":
         return _predict_pixai_details(image)
     return _predict_wd_details(image)
+
+
+def warmup_tagger() -> None:
+    global _warmup_done
+
+    if _warmup_done:
+        return
+
+    started = time.perf_counter()
+    logger.info("Warming up %s tagger...", TAGGER_BACKEND)
+    dummy_image = Image.new("RGB", (512, 512), (255, 255, 255))
+    predict_details(dummy_image)
+    _warmup_done = True
+    logger.info("Tagger warmup finished in %.2fs.", time.perf_counter() - started)
 
 
 def get_tagger_info() -> Dict[str, object]:

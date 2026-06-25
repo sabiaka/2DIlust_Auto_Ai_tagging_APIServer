@@ -2,6 +2,8 @@ const fileInput = document.querySelector("#fileInput");
 const dropZone = document.querySelector("#dropZone");
 const preview = document.querySelector("#preview");
 const dropText = document.querySelector("#dropText");
+const imageUrlInput = document.querySelector("#imageUrlInput");
+const loadImageUrlButton = document.querySelector("#loadImageUrlButton");
 const analyzeOverlay = document.querySelector("#analyzeOverlay");
 const analyzeButton = document.querySelector("#analyzeButton");
 const clearButton = document.querySelector("#clearButton");
@@ -44,6 +46,7 @@ let imageViewer = {
   startY: 0,
   originX: 0,
   originY: 0,
+  moved: false,
 };
 
 async function loadBackendInfo() {
@@ -118,6 +121,35 @@ function setFile(file) {
   preview.hidden = false;
   dropText.hidden = true;
   setStatus(file.name);
+}
+
+async function loadImageFromUrl(url = imageUrlInput.value) {
+  const imageUrl = url.trim();
+  if (!imageUrl) {
+    imageUrlInput.focus();
+    return;
+  }
+
+  try {
+    setStatus("画像リンクを読み込み中...");
+    const response = await fetch(`/image-from-url?url=${encodeURIComponent(imageUrl)}`);
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.detail || "画像リンクを読み込めませんでした");
+    }
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) {
+      throw new Error("画像として読み込めないリンクです");
+    }
+    const pathname = new URL(imageUrl).pathname;
+    const filename = decodeURIComponent(pathname.split("/").filter(Boolean).pop() || "linked-image");
+    const file = new File([blob], filename, { type: blob.type });
+    setFile(file);
+    imageUrlInput.value = imageUrl;
+    setStatus("画像リンクを読み込みました");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
 }
 
 function clearAll() {
@@ -633,6 +665,7 @@ function closeViewer() {
   imageModal.hidden = true;
   document.body.classList.remove("modal-open");
   imageViewer.dragging = false;
+  imageStage.classList.remove("is-dragging");
 }
 
 function resetImageViewer() {
@@ -666,11 +699,34 @@ function applyImageTransform() {
   imageStage.classList.toggle("is-zoomed", imageViewer.scale > 1);
 }
 
+function stageAnchorFromEvent(event) {
+  const rect = imageStage.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left - rect.width / 2,
+    y: event.clientY - rect.top - rect.height / 2,
+  };
+}
+
+function shouldIgnoreDropZoneClick(event) {
+  return event.target === fileInput || Boolean(event.target.closest("[data-drop-control]"));
+}
+
+function droppedText(event) {
+  return event.dataTransfer.getData("text/uri-list") || event.dataTransfer.getData("text/plain");
+}
+
 fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+loadImageUrlButton.addEventListener("click", () => loadImageFromUrl());
+imageUrlInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    loadImageFromUrl();
+  }
+});
 analyzeButton.addEventListener("click", analyze);
 clearButton.addEventListener("click", clearAll);
 dropZone.addEventListener("click", (event) => {
-  if (event.target === fileInput) {
+  if (shouldIgnoreDropZoneClick(event)) {
     return;
   }
   if (hasPreviewImage()) {
@@ -680,6 +736,9 @@ dropZone.addEventListener("click", (event) => {
   }
 });
 dropZone.addEventListener("keydown", (event) => {
+  if (shouldIgnoreDropZoneClick(event)) {
+    return;
+  }
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     if (hasPreviewImage()) {
@@ -720,7 +779,37 @@ for (const eventName of ["dragleave", "drop"]) {
 }
 
 dropZone.addEventListener("drop", (event) => {
-  setFile(event.dataTransfer.files[0]);
+  const file = event.dataTransfer.files[0];
+  if (file) {
+    setFile(file);
+    return;
+  }
+  const text = droppedText(event).trim();
+  if (text) {
+    imageUrlInput.value = text;
+    loadImageFromUrl(text);
+  }
+});
+
+document.addEventListener("paste", (event) => {
+  const items = Array.from(event.clipboardData?.items || []);
+  const imageItem = items.find((item) => item.type.startsWith("image/"));
+  if (imageItem) {
+    const file = imageItem.getAsFile();
+    if (file) {
+      event.preventDefault();
+      setFile(file);
+      setStatus("クリップボード画像を読み込みました");
+    }
+    return;
+  }
+
+  const text = event.clipboardData?.getData("text/plain")?.trim();
+  if (text && /^https?:\/\//i.test(text)) {
+    event.preventDefault();
+    imageUrlInput.value = text;
+    loadImageFromUrl(text);
+  }
 });
 
 closeImageModal.addEventListener("click", closeViewer);
@@ -736,14 +825,12 @@ document.addEventListener("keydown", (event) => {
 });
 imageStage.addEventListener("wheel", (event) => {
   event.preventDefault();
-  const rect = imageStage.getBoundingClientRect();
-  const anchorX = event.clientX - rect.left - rect.width / 2;
-  const anchorY = event.clientY - rect.top - rect.height / 2;
+  const anchor = stageAnchorFromEvent(event);
   const delta = event.deltaY < 0 ? 0.18 : -0.18;
-  setZoom(imageViewer.scale + delta, anchorX, anchorY);
+  setZoom(imageViewer.scale + delta, anchor.x, anchor.y);
 }, { passive: false });
 imageStage.addEventListener("pointerdown", (event) => {
-  if (imageViewer.scale <= 1) {
+  if (event.button !== 0) {
     return;
   }
   imageViewer.dragging = true;
@@ -751,25 +838,42 @@ imageStage.addEventListener("pointerdown", (event) => {
   imageViewer.startY = event.clientY;
   imageViewer.originX = imageViewer.x;
   imageViewer.originY = imageViewer.y;
+  imageViewer.moved = false;
   imageStage.setPointerCapture(event.pointerId);
+  imageStage.classList.toggle("is-dragging", imageViewer.scale > 1);
 });
 imageStage.addEventListener("pointermove", (event) => {
   if (!imageViewer.dragging) {
     return;
   }
-  imageViewer.x = imageViewer.originX + event.clientX - imageViewer.startX;
-  imageViewer.y = imageViewer.originY + event.clientY - imageViewer.startY;
-  applyImageTransform();
-});
-imageStage.addEventListener("pointerup", () => {
-  imageViewer.dragging = false;
-});
-imageStage.addEventListener("dblclick", () => {
-  if (imageViewer.scale > 1) {
-    resetImageViewer();
-  } else {
-    setZoom(2.4);
+  const deltaX = event.clientX - imageViewer.startX;
+  const deltaY = event.clientY - imageViewer.startY;
+  if (Math.hypot(deltaX, deltaY) > 4) {
+    imageViewer.moved = true;
   }
+  if (imageViewer.scale > 1) {
+    imageViewer.x = imageViewer.originX + deltaX;
+    imageViewer.y = imageViewer.originY + deltaY;
+    applyImageTransform();
+  }
+});
+imageStage.addEventListener("pointerup", (event) => {
+  const wasClick = imageViewer.dragging && !imageViewer.moved;
+  imageViewer.dragging = false;
+  imageStage.classList.remove("is-dragging");
+  if (wasClick) {
+    const anchor = stageAnchorFromEvent(event);
+    setZoom(imageViewer.scale >= 4.95 ? 1 : imageViewer.scale + 0.55, anchor.x, anchor.y);
+  }
+});
+imageStage.addEventListener("pointercancel", () => {
+  imageViewer.dragging = false;
+  imageStage.classList.remove("is-dragging");
+});
+imageStage.addEventListener("dblclick", (event) => {
+  event.preventDefault();
+  const anchor = stageAnchorFromEvent(event);
+  setZoom(imageViewer.scale + 0.8, anchor.x, anchor.y);
 });
 zoomOutButton.addEventListener("click", () => setZoom(imageViewer.scale - 0.3));
 zoomInButton.addEventListener("click", () => setZoom(imageViewer.scale + 0.3));
