@@ -6,7 +6,9 @@ torch
 torchvision
 onnx
 onnxruntime-gpu
-transformers
+transformers>=4.49.0
+accelerate
+bitsandbytes
 einops
 safetensors
 timm

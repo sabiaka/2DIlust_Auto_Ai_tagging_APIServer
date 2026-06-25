@@ -8,6 +8,10 @@ const analyzeOverlay = document.querySelector("#analyzeOverlay");
 const analyzeButton = document.querySelector("#analyzeButton");
 const clearButton = document.querySelector("#clearButton");
 const copyButton = document.querySelector("#copyButton");
+const copyDescriptionButton = document.querySelector("#copyDescriptionButton");
+const descriptionOutput = document.querySelector("#descriptionOutput");
+const expressionOutput = document.querySelector("#expressionOutput");
+const situationOutput = document.querySelector("#situationOutput");
 const promptOutput = document.querySelector("#promptOutput");
 const tagList = document.querySelector("#tagList");
 const tagCount = document.querySelector("#tagCount");
@@ -105,11 +109,15 @@ function setFile(file) {
   selectedFile = file;
   analyzeButton.disabled = false;
   clearButton.disabled = false;
+  descriptionOutput.value = "";
+  expressionOutput.textContent = "解析後に表示されます";
+  situationOutput.textContent = "解析後に表示されます";
   promptOutput.value = "";
   currentTags = [];
   tagList.replaceChildren();
   tagCount.textContent = "0件";
   copyButton.disabled = true;
+  copyDescriptionButton.disabled = true;
   activeDetailHost = null;
 
   if (previewUrl) {
@@ -158,6 +166,10 @@ function clearAll() {
   analyzeButton.disabled = true;
   clearButton.disabled = true;
   copyButton.disabled = true;
+  copyDescriptionButton.disabled = true;
+  descriptionOutput.value = "";
+  expressionOutput.textContent = "解析後に表示されます";
+  situationOutput.textContent = "解析後に表示されます";
   promptOutput.value = "";
   currentTags = [];
   activeDetailHost = null;
@@ -277,6 +289,7 @@ async function analyze() {
   }
 
   copyButton.disabled = true;
+  copyDescriptionButton.disabled = true;
   setAnalyzing(true);
   setStatus("解析中...");
 
@@ -284,19 +297,24 @@ async function analyze() {
   formData.append("file", selectedFile);
 
   try {
-    const response = await fetch("/analyze", {
+    const response = await fetch("/describe", {
       method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.detail || `HTTP ${response.status}`);
     }
 
     const result = await response.json();
+    descriptionOutput.value = result.description || "";
+    expressionOutput.textContent = result.expression || "表情の説明は取得できませんでした";
+    situationOutput.textContent = result.situation || "状況の説明は取得できませんでした";
     promptOutput.value = result.prompt;
     renderTags(result.tags);
     copyButton.disabled = result.prompt.length === 0;
+    copyDescriptionButton.disabled = descriptionOutput.value.trim().length === 0;
     setStatus(`${result.tags.length}件のタグを検出`);
     loadHistory();
   } catch (error) {
@@ -573,7 +591,7 @@ function renderDanbooruImages(container, posts) {
 async function loadHistory() {
   historyList.innerHTML = '<p class="empty-state">読み込み中...</p>';
   try {
-    const response = await fetch("/history");
+    const response = await fetch("/describe-history");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -636,9 +654,13 @@ function restoreHistoryItem(item) {
   dropText.hidden = true;
   analyzeButton.disabled = true;
   clearButton.disabled = false;
+  descriptionOutput.value = item.description || "";
+  expressionOutput.textContent = item.expression || "表情の説明は取得できませんでした";
+  situationOutput.textContent = item.situation || "状況の説明は取得できませんでした";
   promptOutput.value = item.prompt || "";
   renderTags(item.tags || []);
   copyButton.disabled = promptOutput.value.trim().length === 0;
+  copyDescriptionButton.disabled = descriptionOutput.value.trim().length === 0;
   setStatus(`${item.filename} を復元`);
 }
 
@@ -755,9 +777,18 @@ promptOutput.addEventListener("input", () => {
   }
 });
 
+descriptionOutput.addEventListener("input", () => {
+  copyDescriptionButton.disabled = descriptionOutput.value.trim().length === 0;
+});
+
 copyButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(promptOutput.value);
   setStatus("コピーしました");
+});
+
+copyDescriptionButton.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(descriptionOutput.value);
+  setStatus("自然文をコピーしました");
 });
 
 for (const tab of tabs) {
