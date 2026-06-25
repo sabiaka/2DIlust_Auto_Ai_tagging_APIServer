@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Image Prompt Lab</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20260624-aspect-viewer" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260625-url-viewer" />
   </head>
   <body>
     <main class="shell">
@@ -34,6 +34,10 @@
               <input id="fileInput" type="file" accept="image/*" />
               <img id="preview" alt="選択した画像のプレビュー" hidden />
               <span id="dropText">画像を選択またはドロップ</span>
+              <div class="url-import" data-drop-control>
+                <input id="imageUrlInput" type="url" placeholder="画像リンクを貼り付け" autocomplete="off" />
+                <button id="loadImageUrlButton" type="button">読込</button>
+              </div>
               <div id="analyzeOverlay" class="analyze-overlay" hidden>
                 <div class="scan-frame">
                   <span></span>
@@ -138,6 +142,6 @@
       </div>
     </div>
 
-    <script src="/assets/app.js?v=20260624-aspect-viewer"></script>
+    <script src="/assets/app.js?v=20260625-url-viewer"></script>
   </body>
 </html>

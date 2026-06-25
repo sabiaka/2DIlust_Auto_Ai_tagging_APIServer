@@ -1,8 +1,10 @@
 # main.py
 
+import asyncio
 import csv
 import json
 import io
+import ipaddress
 import mimetypes
 import cv2
 import numpy as np
@@ -20,6 +22,8 @@ from typing import List, Dict, Optional
 from uuid import uuid4
 import httpx
 import logging
+import os
+import time
 import traceback
 from psd_tools import PSDImage
 
@@ -27,7 +31,7 @@ from psd_tools import PSDImage
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
-from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations
+from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations, warmup_tagger
 
 logger = logging.getLogger("uvicorn")
 
@@ -50,10 +54,18 @@ TRANSLATION_FILES = {
 }
 app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
+async def warmup_tagger_background() -> None:
+    try:
+        await asyncio.to_thread(warmup_tagger)
+    except Exception as exc:
+        logger.warning("Tagger warmup failed; first analysis may still be slow: %s", exc)
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("サーバー起動！モデルとタグをロードするよ...💪")
     load_model_and_tags()
+    if os.getenv("TAGGER_WARMUP", "1").strip().lower() not in {"0", "false", "no"}:
+        asyncio.create_task(warmup_tagger_background())
     logger.info("🚀 準備完了！リクエスト待ってるよ！")
 
 class TagResponse(BaseModel):
@@ -132,6 +144,28 @@ def _normalize_danbooru_tag(tag: str) -> str:
 def _is_allowed_danbooru_image_url(url: str) -> bool:
     parsed = urlparse(url)
     return parsed.scheme == "https" and parsed.netloc in {"cdn.donmai.us", "danbooru.donmai.us"}
+
+def _is_allowed_remote_image_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname.lower()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        return False
+
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return True
+
+    return not (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+    )
 
 def _read_history() -> List[dict]:
     if not HISTORY_FILE.exists():
@@ -258,6 +292,45 @@ async def danbooru_image(url: str):
     content_type = response.headers.get("content-type", "image/jpeg")
     return Response(content=response.content, media_type=content_type)
 
+@app.get("/image-from-url")
+async def image_from_url(url: str):
+    image_url = unquote(url)
+    if not _is_allowed_remote_image_url(image_url):
+        raise HTTPException(status_code=400, detail="Unsupported image URL.")
+
+    parsed = urlparse(image_url)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36 ImagePromptLab/1.0"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    }
+    if parsed.hostname in {"cdn.donmai.us", "danbooru.donmai.us"}:
+        headers["Referer"] = "https://danbooru.donmai.us/"
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=12.0,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            response = await client.get(image_url)
+            response.raise_for_status()
+    except Exception as exc:
+        logger.warning("Remote image fetch failed for %s: %s", image_url, exc)
+        raise HTTPException(status_code=502, detail="Failed to load image URL.")
+
+    if not _is_allowed_remote_image_url(str(response.url)):
+        raise HTTPException(status_code=400, detail="Unsupported redirected image URL.")
+
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="The URL did not return an image.")
+
+    return Response(content=response.content, media_type=content_type)
+
 def _translation_file_label(file_key: str) -> str:
     labels = {
         "extra": "追加翻訳",
@@ -360,12 +433,23 @@ async def analyze_image(file: UploadFile = File(...)):
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="Image files only.")
 
+    started = time.perf_counter()
     try:
         file_bytes = await file.read()
+        read_elapsed = time.perf_counter()
         image = Image.open(io.BytesIO(file_bytes))
         details = predict_details(image)
+        predict_elapsed = time.perf_counter()
         prompt = ", ".join(detail["prompt_tag"] for detail in details)
         history_id = _save_history_image(file_bytes, file.filename, file.content_type or "image/png", prompt, details)
+        total_elapsed = time.perf_counter() - started
+        logger.info(
+            "Analyze finished for %s: read %.2fs, predict %.2fs, total %.2fs.",
+            file.filename,
+            read_elapsed - started,
+            predict_elapsed - read_elapsed,
+            total_elapsed,
+        )
         return AnalyzeResponse(tags=details, prompt=prompt, history_id=history_id)
     except Exception as e:
         logger.error(f"Analyze error: {e}")
