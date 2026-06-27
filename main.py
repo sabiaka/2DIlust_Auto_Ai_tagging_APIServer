@@ -31,6 +31,7 @@ from psd_tools import PSDImage
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
+from captioner import CaptionerOutOfMemoryError, describe_image, get_captioner_info
 from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations, warmup_tagger
 
 logger = logging.getLogger("uvicorn")
@@ -83,6 +84,14 @@ class AnalyzeResponse(BaseModel):
     prompt: str
     history_id: Optional[str] = None
 
+class DescribeResponse(BaseModel):
+    tags: List[TagDetailResponse]
+    prompt: str
+    description: str
+    expression: str
+    situation: str
+    history_id: Optional[str] = None
+
 class HistoryItem(BaseModel):
     id: str
     filename: str
@@ -90,6 +99,11 @@ class HistoryItem(BaseModel):
     image_url: str
     prompt: str
     tags: List[TagDetailResponse]
+
+class DescribeHistoryItem(HistoryItem):
+    description: Optional[str] = None
+    expression: Optional[str] = None
+    situation: Optional[str] = None
 
 class TranslationRow(BaseModel):
     index: int
@@ -138,6 +152,10 @@ async def web_app():
 async def tagger_info():
     return get_tagger_info()
 
+@app.get("/captioner-info")
+async def captioner_info():
+    return get_captioner_info()
+
 def _normalize_danbooru_tag(tag: str) -> str:
     return tag.strip().replace(" ", "_")
 
@@ -180,7 +198,16 @@ def _write_history(items: List[dict]) -> None:
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     HISTORY_FILE.write_text(json.dumps(items[:80], ensure_ascii=False, indent=2), encoding="utf-8")
 
-def _save_history_image(file_bytes: bytes, filename: str, content_type: str, prompt: str, details: List[dict]) -> str:
+def _save_history_image(
+    file_bytes: bytes,
+    filename: str,
+    content_type: str,
+    prompt: str,
+    details: List[dict],
+    description: Optional[str] = None,
+    expression: Optional[str] = None,
+    situation: Optional[str] = None,
+) -> str:
     HISTORY_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     history_id = uuid4().hex
     suffix = Path(filename or "").suffix.lower()
@@ -199,6 +226,12 @@ def _save_history_image(file_bytes: bytes, filename: str, content_type: str, pro
         "prompt": prompt,
         "tags": details,
     }
+    if description:
+        item["description"] = description
+    if expression:
+        item["expression"] = expression
+    if situation:
+        item["situation"] = situation
     history = [item, *[entry for entry in _read_history() if entry.get("id") != history_id]]
     _write_history(history)
     return history_id
@@ -213,6 +246,24 @@ async def list_history():
             image_url=item.get("image_url", f"/history/{item['id']}/image"),
             prompt=item.get("prompt", ""),
             tags=item.get("tags", []),
+        )
+        for item in _read_history()
+        if item.get("id")
+    ]
+
+@app.get("/describe-history", response_model=List[DescribeHistoryItem])
+async def list_describe_history():
+    return [
+        DescribeHistoryItem(
+            id=item["id"],
+            filename=item.get("filename", ""),
+            created_at=item.get("created_at", ""),
+            image_url=item.get("image_url", f"/history/{item['id']}/image"),
+            prompt=item.get("prompt", ""),
+            tags=item.get("tags", []),
+            description=item.get("description"),
+            expression=item.get("expression"),
+            situation=item.get("situation"),
         )
         for item in _read_history()
         if item.get("id")
@@ -455,6 +506,60 @@ async def analyze_image(file: UploadFile = File(...)):
         logger.error(f"Analyze error: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Failed to analyze image.")
+
+@app.post("/describe", response_model=DescribeResponse)
+async def describe_image_natural_language(file: UploadFile = File(...)):
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Image files only.")
+
+    started = time.perf_counter()
+    try:
+        file_bytes = await file.read()
+        read_elapsed = time.perf_counter()
+        image = Image.open(io.BytesIO(file_bytes))
+        details = predict_details(image)
+        tag_elapsed = time.perf_counter()
+        prompt = ", ".join(detail["prompt_tag"] for detail in details)
+        description = await asyncio.to_thread(
+            describe_image,
+            image,
+            [detail["prompt_tag"] for detail in details],
+        )
+        describe_elapsed = time.perf_counter()
+        history_id = _save_history_image(
+            file_bytes,
+            file.filename,
+            file.content_type or "image/png",
+            prompt,
+            details,
+            description=description["description"],
+            expression=description["expression"],
+            situation=description["situation"],
+        )
+        total_elapsed = time.perf_counter() - started
+        logger.info(
+            "Describe finished for %s: read %.2fs, tags %.2fs, describe %.2fs, total %.2fs.",
+            file.filename,
+            read_elapsed - started,
+            tag_elapsed - read_elapsed,
+            describe_elapsed - tag_elapsed,
+            total_elapsed,
+        )
+        return DescribeResponse(
+            tags=details,
+            prompt=prompt,
+            description=description["description"],
+            expression=description["expression"],
+            situation=description["situation"],
+            history_id=history_id,
+        )
+    except CaptionerOutOfMemoryError as e:
+        logger.error(f"Describe OOM: {e}")
+        raise HTTPException(status_code=507, detail=str(e))
+    except Exception as e:
+        logger.error(f"Describe error: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to describe image.")
 
 @app.post("/tag", response_model=TagResponse)
 async def create_tags(file: UploadFile = File(...)):

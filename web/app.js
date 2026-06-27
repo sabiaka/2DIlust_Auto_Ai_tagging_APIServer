@@ -8,6 +8,12 @@ const analyzeOverlay = document.querySelector("#analyzeOverlay");
 const analyzeButton = document.querySelector("#analyzeButton");
 const clearButton = document.querySelector("#clearButton");
 const copyButton = document.querySelector("#copyButton");
+const copyDescriptionButton = document.querySelector("#copyDescriptionButton");
+const descriptionOutput = document.querySelector("#descriptionOutput");
+const expressionOutput = ensureTextarea(document.querySelector("#expressionOutput"));
+const situationOutput = ensureTextarea(document.querySelector("#situationOutput"));
+const copyExpressionButton = addDetailCopyButton(expressionOutput, "Copy");
+const copySituationButton = addDetailCopyButton(situationOutput, "Copy");
 const promptOutput = document.querySelector("#promptOutput");
 const tagList = document.querySelector("#tagList");
 const tagCount = document.querySelector("#tagCount");
@@ -48,6 +54,117 @@ let imageViewer = {
   originY: 0,
   moved: false,
 };
+
+setResultLabels();
+
+function ensureTextarea(output) {
+  if (!output || output.tagName === "TEXTAREA") {
+    return output;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.id = output.id;
+  textarea.className = output.className;
+  textarea.spellcheck = false;
+  textarea.placeholder = output.id === "expressionOutput"
+    ? "Expression details appear here"
+    : "Situation details appear here";
+  textarea.value = "";
+  output.replaceWith(textarea);
+  return textarea;
+}
+
+function setResultLabels() {
+  copyButton.textContent = "Copy";
+  copyDescriptionButton.textContent = "Copy";
+
+  const descriptionHead = descriptionOutput.closest(".result-panel")?.querySelector(".panel-head h2");
+  if (descriptionHead) {
+    descriptionHead.textContent = "Natural description";
+  }
+
+  const expressionTitle = expressionOutput.closest(".detail-card")?.querySelector("h3");
+  if (expressionTitle) {
+    expressionTitle.textContent = "Expression";
+  }
+
+  const situationTitle = situationOutput.closest(".detail-card")?.querySelector("h3");
+  if (situationTitle) {
+    situationTitle.textContent = "Situation";
+  }
+
+  const promptHead = promptOutput.closest(".result-panel")?.querySelectorAll(".panel-head h2")[1];
+  if (promptHead) {
+    promptHead.textContent = "Tag prompt";
+  }
+}
+
+function addDetailCopyButton(output, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost mini";
+  button.textContent = label;
+  button.disabled = true;
+
+  const host = output?.closest(".detail-card");
+  const title = host?.querySelector("h3");
+  if (host && title) {
+    const head = document.createElement("div");
+    head.className = "detail-card-head";
+    title.replaceWith(head);
+    head.append(title, button);
+  }
+  return button;
+}
+
+function outputText(output) {
+  return "value" in output ? output.value : output.textContent;
+}
+
+function setOutputText(output, value) {
+  if ("value" in output) {
+    output.value = value || "";
+  } else {
+    output.textContent = value || "";
+  }
+}
+
+function parseJsonishText(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const source = fenced ? fenced[1].trim() : text;
+  const start = source.indexOf("{");
+  const end = source.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  try {
+    return JSON.parse(source.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDescriptionResult(result) {
+  const embedded = parseJsonishText(result.description);
+  const source = embedded && typeof embedded === "object" ? { ...result, ...embedded } : result;
+  return {
+    description: source.description || "",
+    expression: source.expression || "",
+    situation: source.situation || "",
+  };
+}
+
+function setNaturalOutputs(values) {
+  setOutputText(descriptionOutput, values.description);
+  setOutputText(expressionOutput, values.expression);
+  setOutputText(situationOutput, values.situation);
+  copyDescriptionButton.disabled = outputText(descriptionOutput).trim().length === 0;
+  copyExpressionButton.disabled = outputText(expressionOutput).trim().length === 0;
+  copySituationButton.disabled = outputText(situationOutput).trim().length === 0;
+}
 
 async function loadBackendInfo() {
   try {
@@ -105,6 +222,7 @@ function setFile(file) {
   selectedFile = file;
   analyzeButton.disabled = false;
   clearButton.disabled = false;
+  setNaturalOutputs({ description: "", expression: "", situation: "" });
   promptOutput.value = "";
   currentTags = [];
   tagList.replaceChildren();
@@ -158,6 +276,7 @@ function clearAll() {
   analyzeButton.disabled = true;
   clearButton.disabled = true;
   copyButton.disabled = true;
+  setNaturalOutputs({ description: "", expression: "", situation: "" });
   promptOutput.value = "";
   currentTags = [];
   activeDetailHost = null;
@@ -277,6 +396,7 @@ async function analyze() {
   }
 
   copyButton.disabled = true;
+  setNaturalOutputs({ description: "", expression: "", situation: "" });
   setAnalyzing(true);
   setStatus("解析中...");
 
@@ -284,16 +404,18 @@ async function analyze() {
   formData.append("file", selectedFile);
 
   try {
-    const response = await fetch("/analyze", {
+    const response = await fetch("/describe", {
       method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.detail || `HTTP ${response.status}`);
     }
 
     const result = await response.json();
+    setNaturalOutputs(normalizeDescriptionResult(result));
     promptOutput.value = result.prompt;
     renderTags(result.tags);
     copyButton.disabled = result.prompt.length === 0;
@@ -573,7 +695,7 @@ function renderDanbooruImages(container, posts) {
 async function loadHistory() {
   historyList.innerHTML = '<p class="empty-state">読み込み中...</p>';
   try {
-    const response = await fetch("/history");
+    const response = await fetch("/describe-history");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -636,6 +758,7 @@ function restoreHistoryItem(item) {
   dropText.hidden = true;
   analyzeButton.disabled = true;
   clearButton.disabled = false;
+  setNaturalOutputs(normalizeDescriptionResult(item));
   promptOutput.value = item.prompt || "";
   renderTags(item.tags || []);
   copyButton.disabled = promptOutput.value.trim().length === 0;
@@ -758,6 +881,33 @@ promptOutput.addEventListener("input", () => {
 copyButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(promptOutput.value);
   setStatus("コピーしました");
+});
+
+copyDescriptionButton.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(outputText(descriptionOutput));
+  setStatus("自然文をコピーしました");
+});
+
+copyExpressionButton.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(outputText(expressionOutput));
+  setStatus("Expression copied");
+});
+
+copySituationButton.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(outputText(situationOutput));
+  setStatus("Situation copied");
+});
+
+descriptionOutput.addEventListener("input", () => {
+  copyDescriptionButton.disabled = outputText(descriptionOutput).trim().length === 0;
+});
+
+expressionOutput.addEventListener("input", () => {
+  copyExpressionButton.disabled = outputText(expressionOutput).trim().length === 0;
+});
+
+situationOutput.addEventListener("input", () => {
+  copySituationButton.disabled = outputText(situationOutput).trim().length === 0;
 });
 
 for (const tab of tabs) {

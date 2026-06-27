@@ -9,6 +9,18 @@ services:
       PIXAI_MODEL_NAME: v0.9
       PIXAI_GENERAL_THRESHOLD: "0.30"
       PIXAI_CHARACTER_THRESHOLD: "0.75"
+      QWEN_VL_MODEL_NAME: Qwen/Qwen2.5-VL-3B-Instruct
+      QWEN_VL_LOAD_IN_4BIT: "1"
+      QWEN_VL_MAX_NEW_TOKENS: "384"
+      QWEN_VL_MAX_PIXELS: "602112"
+      QWEN_VL_MIN_PIXELS: "100352"
+      QWEN_VL_MAX_IMAGE_SIDE: "1024"
+      HF_HOME: /cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /cache/huggingface/hub
+      TRANSFORMERS_CACHE: /cache/huggingface/transformers
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    volumes:
+      - hf-cache:/cache/huggingface
     
     # ★★★ ここがガチの魔改造ポイント！ ★★★
     
@@ -33,3 +45,6 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
+
+volumes:
+  hf-cache:

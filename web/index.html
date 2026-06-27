@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Image Prompt Lab</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20260625-url-viewer" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20260625-qwen-describe" />
   </head>
   <body>
     <main class="shell">
@@ -60,6 +60,25 @@
           </div>
 
           <div class="panel result-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>自然文の説明</h2>
+              </div>
+              <button id="copyDescriptionButton" type="button" class="ghost" disabled>コピー</button>
+            </div>
+            <textarea id="descriptionOutput" class="description-output" spellcheck="false" placeholder="解析後に表情や状況の自然文説明が入ります"></textarea>
+
+            <div class="detail-grid">
+              <section class="detail-card">
+                <h3>表情</h3>
+                <p id="expressionOutput">解析後に表示されます</p>
+              </section>
+              <section class="detail-card">
+                <h3>状況</h3>
+                <p id="situationOutput">解析後に表示されます</p>
+              </section>
+            </div>
+
             <div class="panel-head compact">
               <div>
                 <h2>プロンプト</h2>
@@ -142,6 +161,6 @@
       </div>
     </div>
 
-    <script src="/assets/app.js?v=20260625-url-viewer"></script>
+    <script src="/assets/app.js?v=20260625-qwen-describe"></script>
   </body>
 </html>
