@@ -34,6 +34,7 @@ from scenedetect.detectors import ContentDetector
 from captioner import CaptionerOutOfMemoryError, describe_image, get_captioner_info
 from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations, warmup_tagger
 from translation_review import TranslationReview
+from api_auth import ApiTokenMiddleware
 
 logger = logging.getLogger("uvicorn")
 
@@ -42,6 +43,8 @@ app = FastAPI(
     description="シーン分析でノイズを除去し、最強の一つのタグリストを返すAPIサーバー✨",
     version="2.2.0", # さらに進化した！
 )
+
+app.add_middleware(ApiTokenMiddleware, token=os.getenv("API_AUTH_TOKEN", ""))
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"

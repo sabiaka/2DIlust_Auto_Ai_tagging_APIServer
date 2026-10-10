@@ -1,0 +1,13 @@
+# PixAI v1.0 API only; keep Colab's preinstalled PyTorch.
+fastapi
+uvicorn[standard]
+python-multipart
+Pillow
+numpy
+onnxruntime-gpu[cuda,cudnn]==1.22.0
+huggingface-hub
+psd-tools
+opencv-python-headless
+scenedetect
+httpx
+pykakasi>=2.3,<3

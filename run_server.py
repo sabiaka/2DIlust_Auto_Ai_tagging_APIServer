@@ -28,6 +28,8 @@ def main():
     # Load PyTorch before ONNX Runtime to make bundled CUDA DLLs available.
     import torch
     import onnxruntime
+    if os.getenv("ORT_PRELOAD_NVIDIA") == "1":
+        onnxruntime.preload_dlls(directory="")
     import uvicorn
     print(f"PyTorch {torch.__version__}; CUDA available: {torch.cuda.is_available()}", flush=True)
     uvicorn.run("main:app", host=args.host, port=args.port, workers=1)

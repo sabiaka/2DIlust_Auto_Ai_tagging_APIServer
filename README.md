@@ -45,6 +45,22 @@ v0.9も `PIXAI_MODEL_NAME=v0.9` で利用でき、その場合の既定しきい
 
 新しいタグのうち既存辞書に訳がないものは英語で表示されます。Dockerの既定設定はv0.9です。
 
+## Colab API（feature/colab-api ブランチ）
+
+`notebooks/Colab_API.ipynb` をColabで開き、GPUランタイムで「すべてのセルを実行」します。
+PixAI v1.0 FP16のGPU推論と認証を確認した後、Cloudflare Quick Tunnelの一時HTTPS URLを表示します。
+Eagle Clientも `feature/colab-api` ブランチ版を使い、接続設定にURLとAPIトークンを貼り付けます。
+APIトークンは実行ごとに生成されます。トークンなしのアクセスはWeb UI・静的ファイルも含め401になります。
+通常のブラウザーで公開URLを開くだけではWeb UIを使えません。
+
+Colab版は画像・動画のタグ付け用です。Qwenによる説明文生成は含めません。
+Colabの計算枠・利用制約は引き続き適用されます。終了時はランタイムを削除してください。
+モデルとCSV変更はランタイム内に保存するため、削除前に必要なデータをダウンロードしてください。
+
+通常のLAN起動では認証は従来どおり省略可能です。
+外部公開する場合は環境変数 `API_AUTH_TOKEN` を設定し、
+`Authorization: Bearer トークン` ヘッダーを付けてアクセスします。
+
 ## 機能
 
 - 画像ファイルの自動タグ付け
