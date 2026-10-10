@@ -4,6 +4,31 @@
 
 現在の標準バックエンドは PixAI Tagger です。旧仕様の `wd-eva02-large-tagger-v3` も `TAGGER_BACKEND=wd` に切り替えることで利用できます。
 
+## 別PCへPythonでセットアップ（Docker不要）
+
+WindowsではPython 3.11と、GPUを使う場合はNVIDIAドライバーを用意します。
+リポジトリを取得し、そのフォルダで次を実行します。
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+同じPCで使う場合は `Start-Server.bat`、別PCのClientから接続する場合は
+`Start-Server-LAN.bat` をダブルクリックします。後者は `0.0.0.0:8000` で待ち受けます。
+コンソールを開いたまま使い、停止はCtrl+Cです。初回はPixAI v1.0モデルをダウンロードします。
+モデルとキャッシュはこのリポジトリの `.cache` に保存します。
+LinuxではPython仮想環境と依存関係を準備し、`python run_server.py --host 0.0.0.0` で起動できます。
+
+Clientの「接続設定」にはサーバーPCのLAN IP（例: `192.168.1.10`）とポート `8000` を指定します。
+`0.0.0.0` はClientの接続先には指定しません。
+サーバーPCからは `http://127.0.0.1:8000/tagger-info`、ClientのPCからは
+`http://サーバーPCのIP:8000/tagger-info` で接続を確認できます。
+Windowsファイアウォールで必要ならプライベートネットワークからのTCP 8000への接続を許可します。
+認証のないAPIなので、LAN内で使用しインターネットへのポート転送は行わないでください。
+ホスト・ポートは `SERVER_HOST` / `SERVER_PORT` または `run_server.py --host ... --port ...` で変更できます。
 ## このPCのPython構成（PixAI v1.0）
 
 このチェックアウトにはPixAI Tagger v1.0 ONNX FP16対応を追加しています。

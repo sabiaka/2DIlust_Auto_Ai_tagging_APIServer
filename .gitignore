@@ -83,3 +83,5 @@ dmypy.json
 # Model files (large files)
 models_data/model.safetensors
 models_data/model.onnx
+# Runtime image history
+models_data/history/
