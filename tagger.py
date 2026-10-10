@@ -24,8 +24,9 @@ GENERATED_TRANSLATION_FILES = [
 
 TAGGER_BACKEND = os.getenv("TAGGER_BACKEND", "pixai").strip().lower()
 PIXAI_MODEL_NAME = os.getenv("PIXAI_MODEL_NAME", "v0.9")
-PIXAI_GENERAL_THRESHOLD = float(os.getenv("PIXAI_GENERAL_THRESHOLD", "0.30"))
-PIXAI_CHARACTER_THRESHOLD = float(os.getenv("PIXAI_CHARACTER_THRESHOLD", "0.75"))
+PIXAI_V1 = PIXAI_MODEL_NAME == "v1.0"
+PIXAI_GENERAL_THRESHOLD = float(os.getenv("PIXAI_GENERAL_THRESHOLD", "0.17" if PIXAI_V1 else "0.30"))
+PIXAI_CHARACTER_THRESHOLD = float(os.getenv("PIXAI_CHARACTER_THRESHOLD", "0.27" if PIXAI_V1 else "0.75"))
 WD_THRESHOLD = float(os.getenv("WD_THRESHOLD", "0.35"))
 
 ort_session: Optional[object] = None
@@ -143,6 +144,13 @@ def load_model_and_tags() -> None:
     _load_translation_map()
 
     if TAGGER_BACKEND == "pixai":
+        if PIXAI_V1:
+            import pixai_v1
+
+            pixai_v1.load_model()
+            pixai_tagger = pixai_v1.predict_details
+            logger.info("Loaded PixAI v1.0 FP16 with providers %s.", pixai_v1.session.get_providers())
+            return
         try:
             from imgutils.tagging.pixai import get_pixai_tags
         except ImportError as exc:
@@ -190,6 +198,8 @@ def prepare_image(image: Image.Image, target_size: int) -> np.ndarray:
 
 
 def _predict_pixai(image: Image.Image) -> List[str]:
+    if PIXAI_V1:
+        return list(dict.fromkeys(detail["translated"] for detail in _predict_pixai_details(image)))
     if pixai_tagger is None:
         raise RuntimeError("PixAI tagger is not loaded. Call load_model_and_tags() first.")
 
@@ -223,6 +233,20 @@ def _predict_pixai(image: Image.Image) -> List[str]:
 def _predict_pixai_details(image: Image.Image) -> List[TagDetail]:
     if pixai_tagger is None:
         raise RuntimeError("PixAI tagger is not loaded. Call load_model_and_tags() first.")
+
+    if PIXAI_V1:
+        with _predict_lock:
+            predictions = pixai_tagger(image, PIXAI_GENERAL_THRESHOLD, PIXAI_CHARACTER_THRESHOLD)
+        return [
+            {
+                "tag": _normalize_tag(item["tag"]),
+                "prompt_tag": _normalize_tag(item["tag"]).replace(" ", "_"),
+                "translated": _translate_tag(item["tag"]),
+                "category": item["category"],
+                "score": item["score"],
+            }
+            for item in predictions
+        ]
 
     thresholds = {
         "general": PIXAI_GENERAL_THRESHOLD,
@@ -330,7 +354,7 @@ def warmup_tagger() -> None:
 
 
 def get_tagger_info() -> Dict[str, object]:
-    return {
+    info = {
         "backend": TAGGER_BACKEND,
         "pixai_model_name": PIXAI_MODEL_NAME if TAGGER_BACKEND == "pixai" else None,
         "pixai_general_threshold": PIXAI_GENERAL_THRESHOLD if TAGGER_BACKEND == "pixai" else None,
@@ -339,3 +363,17 @@ def get_tagger_info() -> Dict[str, object]:
         "legacy_onnx_loaded": ort_session is not None,
         "pixai_loaded": pixai_tagger is not None,
     }
+    if TAGGER_BACKEND == "pixai" and PIXAI_V1:
+        import pixai_v1
+
+        info.update(
+            precision="fp16",
+            tag_count=len(pixai_v1.tags),
+            input_size=1008,
+            providers=pixai_v1.session.get_providers() if pixai_v1.session else [],
+            category_thresholds={
+                category: float(os.getenv(f"PIXAI_{category.upper()}_THRESHOLD", default))
+                for category, default in pixai_v1.THRESHOLDS.items()
+            },
+        )
+    return info

@@ -4,6 +4,22 @@
 
 現在の標準バックエンドは PixAI Tagger です。旧仕様の `wd-eva02-large-tagger-v3` も `TAGGER_BACKEND=wd` に切り替えることで利用できます。
 
+## このPCのPython構成（PixAI v1.0）
+
+このチェックアウトにはPixAI Tagger v1.0 ONNX FP16対応を追加しています。
+親フォルダの `outputs/start-server.cmd` で、専用のPython 3.11環境とRTX 2070を使って起動します。
+`outputs/stop-server.cmd` で停止します。APIは `http://127.0.0.1:8000` です。
+
+`PIXAI_MODEL_NAME=v1.0` で新しいバックエンドを選択します。`PIXAI_MODEL_PATH` に
+`model_fp16.onnx` のパスを指定し、同じフォルダに `selected_tags.csv` を置きます。
+未指定の場合は固定リビジョンのモデルをHugging Faceから取得します。
+前処理は1008×1008の黒パディング、CUDAメモリ確保方式は `kSameAsRequested` です。
+しきい値は一般0.17、キャラクター0.27、画風0.15、作品0.24、メタ0.17、レーティング0.41です。
+各しきい値は `PIXAI_GENERAL_THRESHOLD` などの環境変数で変更できます。
+v0.9も `PIXAI_MODEL_NAME=v0.9` で利用でき、その場合の既定しきい値は一般0.30、キャラクター0.75です。
+
+新しいタグのうち既存辞書に訳がないものは英語で表示されます。Dockerの既定設定はv0.9です。
+
 ## 機能
 
 - 画像ファイルの自動タグ付け
