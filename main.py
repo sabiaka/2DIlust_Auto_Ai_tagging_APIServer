@@ -49,6 +49,7 @@ HISTORY_DIR = MODELS_DATA_DIR / "history"
 HISTORY_IMAGES_DIR = HISTORY_DIR / "images"
 HISTORY_FILE = HISTORY_DIR / "history.json"
 TRANSLATION_FILES = {
+    "ai": MODELS_DATA_DIR / "tag_translations_ai.csv",
     "extra": MODELS_DATA_DIR / "tag_translations_extra.csv",
     "pixai_general": MODELS_DATA_DIR / "pixai_missing_translations.csv",
     "pixai_character": MODELS_DATA_DIR / "pixai_missing_character_translations.csv",
@@ -384,6 +385,7 @@ async def image_from_url(url: str):
 
 def _translation_file_label(file_key: str) -> str:
     labels = {
+        "ai": "新しい翻訳辞書",
         "extra": "追加翻訳",
         "pixai_general": "PixAI一般タグ",
         "pixai_character": "PixAIキャラクター",

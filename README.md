@@ -177,6 +177,13 @@ environment:
 - `models_data/tag_translations_extra.csv`
 - `models_data/pixai_missing_character_translations.csv`
 - `models_data/pixai_missing_translations.csv`
+- `models_data/tag_translations_ai.csv`（今回の修正版）
+
+今回の修正版は、既存訳の一部を文脈に合わせて修正し、未翻訳タグの一部を追加しています。
+すべてのタグの訳を確定したものではありません。作者の識別子は原表記を保持し、
+不明な固有名詞や専門語は推測で埋めず、既存辞書または英語表示を使います。
+修正版は元の辞書より優先して読み込みます。`tag_translations_extra.csv` の手動設定は最優先です。
+Web画面の「CSV翻訳」→「新しい翻訳辞書」から修正版を編集できます。
 
 `tagger.py` は起動時にこれらを読み込み、PixAIから返った英語タグを日本語タグへ変換します。
 

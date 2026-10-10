@@ -17,6 +17,7 @@ ONNX_MODEL_FILE = MODEL_PATH / "model.onnx"
 CONFIG_FILE = MODEL_PATH / "config.json"
 TAG_FILE = MODEL_PATH / "selected_tags.csv"
 EXTRA_TAG_TRANSLATION_FILE = Path(os.getenv("EXTRA_TAG_TRANSLATION_FILE", MODEL_PATH / "tag_translations_extra.csv"))
+AI_TAG_TRANSLATION_FILE = MODEL_PATH / "tag_translations_ai.csv"
 GENERATED_TRANSLATION_FILES = [
     MODEL_PATH / "pixai_missing_character_translations.csv",
     MODEL_PATH / "pixai_missing_translations.csv",
@@ -64,13 +65,18 @@ def _load_translation_map() -> None:
     else:
         logger.warning("%s is missing; built-in Japanese translations will be skipped.", TAG_FILE)
 
-    if EXTRA_TAG_TRANSLATION_FILE.exists():
-        _load_translation_csv(EXTRA_TAG_TRANSLATION_FILE, append_to_tags_list=False)
-        logger.info("Loaded extra tag translations from %s.", EXTRA_TAG_TRANSLATION_FILE)
-
     for path in GENERATED_TRANSLATION_FILES:
         if path.exists():
             _load_translation_csv(path, append_to_tags_list=False)
+
+    if AI_TAG_TRANSLATION_FILE.exists():
+        _load_translation_csv(AI_TAG_TRANSLATION_FILE, append_to_tags_list=False)
+        logger.info("Loaded revised Japanese translations from %s.", AI_TAG_TRANSLATION_FILE)
+
+    # Explicit user overrides win over both original and revised dictionaries.
+    if EXTRA_TAG_TRANSLATION_FILE.exists():
+        _load_translation_csv(EXTRA_TAG_TRANSLATION_FILE, append_to_tags_list=False)
+        logger.info("Loaded extra tag translations from %s.", EXTRA_TAG_TRANSLATION_FILE)
 
 
 def reload_translations() -> None:
