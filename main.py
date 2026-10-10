@@ -33,6 +33,7 @@ from scenedetect.detectors import ContentDetector
 
 from captioner import CaptionerOutOfMemoryError, describe_image, get_captioner_info
 from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations, warmup_tagger
+from translation_review import TranslationReview
 
 logger = logging.getLogger("uvicorn")
 
@@ -45,6 +46,7 @@ app = FastAPI(
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 MODELS_DATA_DIR = BASE_DIR / "models_data"
+translation_review = TranslationReview(MODELS_DATA_DIR)
 HISTORY_DIR = MODELS_DATA_DIR / "history"
 HISTORY_IMAGES_DIR = HISTORY_DIR / "images"
 HISTORY_FILE = HISTORY_DIR / "history.json"
@@ -130,6 +132,10 @@ class TranslationUpdateResponse(BaseModel):
 
 class TranslationReloadResponse(BaseModel):
     ok: bool
+
+class TranslationReviewUpdate(BaseModel):
+    name: str
+    japanese_name: str
 
 class DanbooruPost(BaseModel):
     id: int
@@ -382,6 +388,24 @@ async def image_from_url(url: str):
         raise HTTPException(status_code=400, detail="The URL did not return an image.")
 
     return Response(content=response.content, media_type=content_type)
+
+@app.get("/translation-review")
+async def compare_translations(q: str = "", state: str = "changes", category: str = "", offset: int = 0, limit: int = 50):
+    try:
+        return translation_review.list_rows(q, state, category, offset, limit)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.post("/translation-review")
+async def save_reviewed_translation(update: TranslationReviewUpdate):
+    try:
+        row = translation_review.save(update.name, update.japanese_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown tag.")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    reload_translations()
+    return {"ok": True, "row": row}
 
 def _translation_file_label(file_key: str) -> str:
     labels = {

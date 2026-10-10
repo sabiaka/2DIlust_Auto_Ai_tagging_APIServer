@@ -444,6 +444,7 @@ function activateView(viewId) {
   if (viewId === "translationView" && !translationRows.children.length) {
     loadTranslations();
   }
+  document.dispatchEvent(new CustomEvent("viewchange", { detail: viewId }));
 }
 
 function scheduleTranslationLoad() {

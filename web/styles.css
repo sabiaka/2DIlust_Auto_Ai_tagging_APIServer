@@ -17,6 +17,29 @@
   font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, sans-serif;
 }
 
+.review-panel { padding: 20px; }
+.review-stats { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.review-stat { display: grid; gap: 5px; min-width: 170px; padding: 14px 18px; background: var(--accent-soft); border-radius: var(--radius); }
+.review-stat strong { color: var(--accent-strong); font-size: 26px; }
+.review-stat span { color: var(--muted); font-size: 13px; }
+.review-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.review-filters .is-selected { color: white; background: var(--accent); border-color: var(--accent); }
+.review-table-scroll { overflow-x: auto; margin-top: 12px; }
+.review-table { width: 100%; border-collapse: collapse; text-align: left; table-layout: fixed; }
+.review-table th { padding: 12px; background: var(--inactive); color: var(--muted); font-size: 13px; }
+.review-table th:nth-child(1) { width: 25%; }.review-table th:nth-child(2), .review-table th:nth-child(3) { width: 21%; }.review-table th:nth-child(4) { width: 33%; }
+.review-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.review-tag { color: var(--accent-strong); font-weight: 700; }
+.review-category, .review-note { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.review-old { color: var(--muted); }
+.review-badge { display: inline-block; margin-top: 8px; padding: 3px 7px; border-radius: 4px; background: var(--inactive); color: var(--muted); font-size: 11px; }
+.state-review { background: #fff1dc; color: #8a581a; }.state-resolved { background: var(--accent-soft); color: var(--accent-strong); }
+.review-edit { display: flex; flex-wrap: wrap; gap: 8px; }.review-edit input { min-width: 140px; flex: 1; width: 100%; }.review-edit button { padding: 8px 12px; font-size: 12px; }
+.review-feedback { display: block; margin-top: 6px; color: var(--accent-strong); }
+.review-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 20px; }
+#reviewSearch { width: min(440px,70vw); }
+@media(max-width: 920px) { .tabs { flex-wrap: wrap; }.review-table { min-width: 830px; }.review-panel { padding: 12px; }.review-stat { min-width: 120px; flex: 1; } }
+
 * {
   box-sizing: border-box;
 }
