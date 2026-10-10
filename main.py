@@ -390,9 +390,9 @@ async def image_from_url(url: str):
     return Response(content=response.content, media_type=content_type)
 
 @app.get("/translation-review")
-async def compare_translations(q: str = "", state: str = "changes", category: str = "", offset: int = 0, limit: int = 50):
+async def compare_translations(q: str = "", state: str = "changes", category: str = "", offset: int = 0, limit: int = 50, order: str = "name"):
     try:
-        return translation_review.list_rows(q, state, category, offset, limit)
+        return translation_review.list_rows(q, state, category, offset, limit, order)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 

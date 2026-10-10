@@ -2,12 +2,44 @@
 import csv
 import os
 import threading
+import re
+import unicodedata
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 CATEGORIES = {'0':'general', '1':'style', '3':'copyright', '4':'character', '5':'meta', '9':'rating'}
+KANA_INDEX = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん'
+INDEX_ORDER = list(KANA_INDEX) + list('ABCDEFGHIJKLMNOPQRSTUVWXYZ') + ['0–9', '#']
+
+
+@lru_cache(maxsize=65536)
+def reading(label):
+    value = unicodedata.normalize('NFKC', label).strip()
+    if re.search(r'[一-龯]',value):
+        value = ''.join(part['hira'] for part in converter().convert(value))
+    value = ''.join(chr(ord(char)-96) if 'ァ'<=char<='ヶ' else char for char in value)
+    return value.lower()
+
+
+@lru_cache(maxsize=1)
+def converter():
+    from pykakasi import kakasi
+    return kakasi()
+
+
+def index_letter(value):
+    value = re.sub(r'^[^a-zA-Z0-9ぁ-ゖ]+','',value)
+    if not value:
+        return '#'
+    first = unicodedata.normalize('NFD',value[0])[0]
+    first = first.translate(str.maketrans('ぁぃぅぇぉっゃゅょゎ','あいうえおつやゆよわ'))
+    if first in KANA_INDEX:
+        return first
+    if first.isascii() and first.isalpha():
+        return first.upper()
+    return '0–9' if first.isdigit() else '#'
 
 
 def read_csv(path):
@@ -53,11 +85,13 @@ class TranslationReview:
                 state = 'unchanged'
             yield {'name':name, 'category':CATEGORIES.get(source['category'],source['category']), 'old_translation':old, 'revised_translation':proposed, 'current_translation':current, 'manual_translation':manual.get(key,''), 'state':state, 'needs_review':pending, 'note':source.get('note','') if pending else ''}
 
-    def list_rows(self, query='', state='changes', category='', offset=0, limit=50):
+    def list_rows(self, query='', state='changes', category='', offset=0, limit=50, order='name'):
         if state not in {'all','changes','changed','new','review','resolved','preserved','unchanged'}:
             raise ValueError('Unknown filter')
         if category and category not in set(CATEGORIES.values()):
             raise ValueError('Unknown category')
+        if order not in {'name','japanese'}:
+            raise ValueError('Unknown sort order')
         query = query.strip().lower().replace('_',' ')
         all_rows = list(self.rows())
         counts = dict(Counter(row['state'] for row in all_rows))
@@ -69,13 +103,22 @@ class TranslationReview:
                 continue
             if category and row['category']!=category:
                 continue
-            text = ' '.join(str(row[k]) for k in ['name','old_translation','revised_translation','current_translation']).lower().replace('_',' ')
+            row['reading'] = reading(row['current_translation']) if order=='japanese' else row['name'].lower()
+            row['letter'] = index_letter(row['reading'])
+            text = (' '.join(str(row[k]) for k in ['name','old_translation','revised_translation','current_translation'])+' '+row['reading']).lower().replace('_',' ')
             if query and query not in text:
                 continue
             matched.append(row)
+        index_order = INDEX_ORDER if order=='japanese' else list('ABCDEFGHIJKLMNOPQRSTUVWXYZ') + ['0–9'] + list(KANA_INDEX) + ['#']
+        matched.sort(key=lambda row:(index_order.index(row['letter']),row['reading'],row['name']))
+        sections = []
+        for index,row in enumerate(matched):
+            if not sections or sections[-1]['letter']!=row['letter']:
+                sections.append({'letter':row['letter'], 'start':index, 'count':0})
+            sections[-1]['count'] += 1
         offset = max(0,offset)
-        limit = max(1,min(limit,200))
-        return {'rows':matched[offset:offset+limit], 'total':len(matched), 'offset':offset, 'limit':limit, 'counts':counts}
+        limit = max(0,min(limit,200))
+        return {'rows':matched if limit==0 else matched[offset:offset+limit], 'total':len(matched), 'offset':offset, 'limit':limit, 'counts':counts, 'sections':sections, 'index_order':index_order}
 
     def save(self, name, translation):
         if name not in self.catalog():

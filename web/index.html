@@ -131,12 +131,15 @@
               <option value="">すべて</option><option value="general">一般</option><option value="character">キャラクター</option>
               <option value="copyright">作品</option><option value="style">画風・作者</option><option value="meta">メタ情報</option><option value="rating">レーティング</option>
             </select></label>
+            <label>並び順<select id="reviewOrder"><option value="japanese">日本語順（あいうえお）</option><option value="name">英語タグ順（ABC）</option></select></label>
           </div>
           <div class="translation-summary"><span id="reviewSummary">読み込み前</span><span id="reviewStatus" role="status" aria-live="polite"></span></div>
-          <div class="review-table-scroll">
-            <table class="review-table"><thead><tr><th scope="col">タグ</th><th scope="col">旧訳</th><th scope="col">新訳</th><th scope="col">使用する訳</th></tr></thead><tbody id="reviewRows"></tbody></table>
+          <div class="review-list-layout">
+            <div id="reviewScroll" class="review-table-scroll" tabindex="0" aria-label="翻訳一覧をスクロール">
+              <table class="review-table"><thead><tr><th scope="col">タグ</th><th scope="col">旧訳</th><th scope="col">新訳</th><th scope="col">使用する訳</th></tr></thead><tbody id="reviewRows"></tbody></table>
+            </div>
+            <aside class="review-index-rail" aria-label="文字から移動"><div id="reviewPosition" class="review-position">—</div><nav id="reviewIndex" class="review-index"></nav></aside>
           </div>
-          <div class="review-pagination"><button id="reviewPrevious" type="button" class="ghost">前の50件</button><span id="reviewPage"></span><button id="reviewNext" type="button" class="ghost">次の50件</button></div>
         </div>
       </section>
 

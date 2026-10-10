@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from translation_review import TranslationReview
+from translation_review import TranslationReview, reading, index_letter
 
 
 def write(path, fields, rows):
@@ -34,10 +34,22 @@ class TranslationReviewTests(unittest.TestCase):
         self.assertEqual((row['old_translation'],row['revised_translation']),('心臓','ハート'))
         pending = self.review.list_rows(state='review', limit=1, offset=1)
         self.assertEqual(pending['total'],2)
-        self.assertEqual(pending['rows'][0]['name'],'unknown_character')
+        self.assertEqual(pending['rows'][0]['name'],'unknown_tag')
         self.assertEqual(self.review.list_rows(state='review', category='character')['total'],1)
         with self.assertRaises(ValueError):
             self.review.list_rows(state='invalid')
+
+    def test_full_list_and_reading_index(self):
+        self.assertEqual(index_letter(reading('お茶')), 'お')
+        self.assertEqual(index_letter(reading('ガラス')), 'か')
+        self.assertEqual(index_letter(reading('ＡＢＣ')), 'A')
+        result = self.review.list_rows(state='all', limit=0, order='japanese')
+        self.assertEqual(len(result['rows']), result['total'])
+        self.assertEqual(result['rows'][0]['name'], 'heart')
+        self.assertEqual(result['sections'][0], {'letter':'は','start':0,'count':1})
+        self.assertEqual(self.review.list_rows(query='はーと', order='japanese')['total'],1)
+        with self.assertRaises(ValueError):
+            self.review.list_rows(order='bad')
 
     def test_pending_save_persists_and_preserves_existing_entries(self):
         row = self.review.save('unknown_tag','新しい訳')

@@ -17,3 +17,4 @@ opencv-python
 scenedetect
 dghs-imgutils>=0.19.0
 httpx
+pykakasi>=2.3,<3
