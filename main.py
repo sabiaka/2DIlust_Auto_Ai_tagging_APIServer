@@ -35,6 +35,7 @@ from captioner import CaptionerOutOfMemoryError, describe_image, get_captioner_i
 from tagger import get_tagger_info, predict, predict_details, load_model_and_tags, reload_translations, warmup_tagger
 from translation_review import TranslationReview
 from api_auth import ApiTokenMiddleware
+from batch_api import router as batch_router
 
 logger = logging.getLogger("uvicorn")
 
@@ -45,6 +46,7 @@ app = FastAPI(
 )
 
 app.add_middleware(ApiTokenMiddleware, token=os.getenv("API_AUTH_TOKEN", ""))
+app.include_router(batch_router)
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
@@ -160,7 +162,10 @@ async def web_app():
 
 @app.get("/tagger-info")
 async def tagger_info():
-    return get_tagger_info()
+    import torch
+    info = get_tagger_info()
+    info.update(batch_api_version=1, gpu_name=torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')
+    return info
 
 @app.get("/captioner-info")
 async def captioner_info():
